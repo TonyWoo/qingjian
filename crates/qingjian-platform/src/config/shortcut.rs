@@ -76,18 +76,20 @@ mod tests {
 
     #[test]
     fn old_files_without_modifier_keys_still_parse_and_get_defaults() {
+        // 译词键的缺省是分平台的（Windows 用 Ctrl，见 `Default`），断言的是「回到缺省」而不是某个平台的值
+        let default = ShortcutConfig::default().translation_keys();
         let parsed: ShortcutConfig = toml::from_str("expression = \"i\"\n").unwrap();
         assert_eq!(parsed.mode.expression, 'i');
-        assert_eq!(
-            parsed.translation_keys(),
-            (Modifiers::OPTION, Modifiers::SHIFT_OPTION)
-        );
-        let same: ShortcutConfig =
-            toml::from_str("translation = \"option\"\ntranslation_second = \"option\"\n").unwrap();
-        assert_eq!(
-            same.translation_keys(),
-            (Modifiers::OPTION, Modifiers::SHIFT_OPTION)
-        );
+        assert_eq!(parsed.translation_keys(), default);
+        // 两个键写成了同一个：非法组合，整个退回缺省
+        let same: ShortcutConfig = toml::from_str(&format!(
+            "translation = \"{}\"\ntranslation_second = \"{}\"\n",
+            default.0.key(),
+            default.0.key()
+        ))
+        .unwrap();
+        assert_eq!(same.translation_keys(), default);
+        // 两个键都给全且不同：原样用，不经缺省
         let swapped: ShortcutConfig =
             toml::from_str("translation = \"control+option\"\ntranslation_second = \"option\"\n")
                 .unwrap();
@@ -98,10 +100,16 @@ mod tests {
     fn delete_keys_fall_back_when_clashing_with_translation_keys() {
         let parsed: ShortcutConfig = toml::from_str("").unwrap();
         assert_eq!(parsed.delete_keys(), Modifiers::SHIFT);
-        let clash: ShortcutConfig = toml::from_str("delete_candidate = \"option\"\n").unwrap();
+        // 撞上译词键（缺省值分平台，所以从缺省里取）时删候选键退回 Shift
+        let clash: ShortcutConfig = toml::from_str(&format!(
+            "delete_candidate = \"{}\"\n",
+            ShortcutConfig::default().translation.key()
+        ))
+        .unwrap();
         assert_eq!(clash.delete_keys(), Modifiers::SHIFT);
-        let custom: ShortcutConfig =
-            toml::from_str("delete_candidate = \"control+shift\"\n").unwrap();
-        assert!(custom.delete_keys().control);
+        // 不撞译词键时按配置用。取 command：两组缺省（option / shift+option / control / shift+control）
+        // 在任何平台上都不含它，而 control+shift 在 Windows 上正好是缺省的第二组
+        let custom: ShortcutConfig = toml::from_str("delete_candidate = \"command\"\n").unwrap();
+        assert!(custom.delete_keys().command);
     }
 }

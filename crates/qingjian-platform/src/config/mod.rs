@@ -348,7 +348,7 @@ impl Config {
         };
         toml::from_str(&source).map_err(|source| ConfigError::Parse {
             path: path.to_owned(),
-            source,
+            source: Box::new(source),
         })
     }
 
@@ -378,7 +378,7 @@ impl Config {
         };
         let mut document: DocumentMut = source.parse().map_err(|source| ConfigError::Edit {
             path: path.to_owned(),
-            source,
+            source: Box::new(source),
         })?;
         // 分节不存在时先建成标准表，否则 toml_edit 会写成顶层的行内表 `predict = { enabled = true }`
         if !document.get(section).is_some_and(|item| item.is_table()) {
@@ -414,7 +414,7 @@ impl Config {
         };
         let mut document: DocumentMut = source.parse().map_err(|source| ConfigError::Edit {
             path: path.to_owned(),
-            source,
+            source: Box::new(source),
         })?;
         if !document.get(section).is_some_and(|item| item.is_table()) {
             document[section] = toml_edit::table();
@@ -491,7 +491,11 @@ mod tests {
         assert_eq!(config.general.log_level, LogLevel::Info);
         assert_eq!(config.shortcut.mode.expression, 'i');
         assert_eq!(config.shortcut.mode.question, 'u');
-        assert_eq!(config.shortcut.translation, Modifiers::OPTION);
+        // 译词键的缺省分平台（Windows 用 Ctrl），这里断言的是「没写就用缺省」
+        assert_eq!(
+            config.shortcut.translation,
+            ShortcutConfig::default().translation
+        );
     }
 
     #[test]
