@@ -87,9 +87,12 @@ impl Engine {
         });
     }
 
-    /// 键盘方案的键（双拼方案如 `xiaohe`、注音为 `zhuyin`），全拼为空；输入日志用。
+    /// 键盘方案的键（双拼方案如 `xiaohe`、注音为 `zhuyin`、形码为 `wubi`），全拼为空；输入日志用。
+    /// 日志里必须能认出形码：那些行里的「拼音」列实际上是编码，别的东西（回放、按方案统计）照着它分辨。
     pub(super) fn scheme_key(&self) -> String {
-        if self.zhuyin {
+        if self.code.is_some() {
+            "wubi".to_owned()
+        } else if self.zhuyin {
             "zhuyin".to_owned()
         } else {
             self.shuangpin

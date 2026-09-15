@@ -86,6 +86,14 @@ fn replay_commit(
     report: &mut Report,
     show_misses: usize,
 ) {
+    // 形码的日志里「拼音」那一列其实是编码，没有码表就重放不了（按拼音重放会得出看着像真的命中率）。
+    // 给了 `--wubi` 就照常走，引擎那边是码表在出候选。混着两种方案的日志要等按行切方案（docs/plan/wubi.md 阶段 4）
+    if commit.scheme == "wubi" && !engine.is_code_mode() {
+        report.skip(commit.source);
+        engine.clear();
+        engine.break_chain();
+        return;
+    }
     let Some(tally) = report.tally_for(commit.source) else {
         // 不是本地排序给出的（云端词、原样上屏……）：只计数；那次上屏的词没法接进上文，断链。
         // 原样上屏照样走一遍 `take_raw`：个人英文词（`gist`）与「这个串不纠」都是从这里学的，不走它回放里的英文候选与纠错就比真实使用差

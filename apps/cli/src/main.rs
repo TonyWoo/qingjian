@@ -17,7 +17,7 @@ use std::time::Instant;
 
 use clap::Parser;
 use qingjian_core::{EmojiTable, Engine, FuzzyRules, Language};
-use qingjian_dictionary::{Dictionary, WordList};
+use qingjian_dictionary::{CodeTable, Dictionary, WordList};
 use qingjian_learning::FrequencyLearner;
 use qingjian_lm::BigramModel;
 use qingjian_platform::Config;
@@ -248,6 +248,10 @@ fn build_engine(args: &Args) -> Result<Engine, CliError> {
     }
     engine.set_shuangpin(config.general.shuangpin());
     engine.set_zhuyin_mode(config.general.zhuyin);
+    if let Some(path) = &args.wubi {
+        engine.set_code_table(Some(CodeTable::from_path(path)?));
+        tracing::info!(table = %path.display(), "形码码表已载入");
+    }
     if config.predict.enabled {
         let predictor = CloudPredictor::new(&config.predict)?;
         engine = engine.with_predictor(Box::new(predictor));

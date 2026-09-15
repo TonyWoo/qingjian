@@ -28,7 +28,7 @@ mod vocabulary;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use qingjian_dictionary::{Dictionary, Match, WordList};
+use qingjian_dictionary::{CodeTable, Dictionary, Match, WordList};
 
 pub use alignment::Alignment;
 pub use annotation::AnnotationReport;
@@ -229,6 +229,10 @@ pub struct Engine {
     /// 注音模式开关，開著時緩衝區裡是注音大千鍵位，查詞前先解成拼音（見 [`crate::zhuyin`]）。
     zhuyin: bool,
 
+    /// 形码码表（五笔）。`Some` 时缓冲区里是编码，查词直接按编码前缀查表，
+    /// 不走拼音的切分、整句、模糊音与纠错（见 [`Engine::query_code`]）。
+    code: Option<CodeTable>,
+
     /// emoji 表，没有就不出 emoji 候选。
     emoji: Option<EmojiTable>,
 }
@@ -357,6 +361,7 @@ impl Engine {
             fuzzy: FuzzyRules::default(),
             shuangpin: None,
             zhuyin: false,
+            code: None,
             emoji: None,
         }
     }

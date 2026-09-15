@@ -2,6 +2,7 @@
 
 use super::*;
 
+mod code;
 mod english_tail;
 mod result;
 mod snapshot;
@@ -74,6 +75,11 @@ impl Engine {
         }
         if is_raw(keys, self.modes(), self.shuangpin, self.zhuyin) {
             return Ok(self.query_raw(keys, rest, start));
+        }
+        // 形码（五笔）与拼音是两条平行的管线，在进切分之前分岔。放在这里是为了让 `?` 问字与
+        // `-` 直输段仍然先分派出去：形码下 `v` / `u` / `i` 是字根键，模式键已由 `modes()` 让位。
+        if self.code.is_some() {
+            return Ok(self.query_code(keys, rest, start));
         }
         // 双拼先解成全拼（音节间已用 `'` 连好，切分没有歧义），之后与全拼同路；解不动的键当尾巴
         let decoded = self.decode(keys);

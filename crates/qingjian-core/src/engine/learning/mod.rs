@@ -141,7 +141,9 @@ impl Engine {
     /// 整句、快捷候选、emoji 没什么可删。删完缓存作废，它也不再当下一个词的上文。
     pub fn forget(&mut self, candidate: &Candidate) -> Forgotten {
         let forgotten = match candidate.kind {
-            CandidateKind::Chinese | CandidateKind::Cloud => self.learner.forget(&candidate.text),
+            CandidateKind::Chinese | CandidateKind::Code | CandidateKind::Cloud => {
+                self.learner.forget(&candidate.text)
+            }
             CandidateKind::English => Forgotten {
                 user_word: self.learner.forget_english(&candidate.text),
                 learning: false,
