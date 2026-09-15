@@ -54,9 +54,9 @@ pub enum Command {
         /// 输入的 Rime 码表（`.dict.yaml`，如极点 86 五笔）
         input: PathBuf,
 
-        /// 词频来源：青简词库 TSV（`词\t拼音\t词频`）
-        #[arg(long, default_value = "assets/lexicon/dict.tsv")]
-        frequency: PathBuf,
+        /// 词频来源：青简词库 TSV（`词\t拼音\t词频`）。可给多个（基础词库 + 随包领域词库），同一个词取词频最大的那份
+        #[arg(long, default_value = "assets/lexicon/dict.tsv", num_args = 1..)]
+        frequency: Vec<PathBuf>,
 
         /// 输出文件名（写在 --out-dir 下）
         #[arg(long, default_value = "wubi86.tsv")]

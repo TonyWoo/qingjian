@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 use std::io::{BufWriter, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use qingjian_dictionary::Dictionary;
 use qingjian_dictionary::import::{looks_like_rime, to_tsv};
@@ -32,8 +32,12 @@ pub struct Converted {
     pub unknown: usize,
 }
 
-/// 读 Rime 码表写出青简形码 TSV，词频从 `frequency`（青简词库 TSV）交叉回填。
-pub fn convert(input: &Path, frequency: &Path, output: &Path) -> Result<Converted, ConvertError> {
+/// 读 Rime 码表写出青简形码 TSV，词频从 `frequencies`（青简词库 TSV，可给多本）交叉回填。
+pub fn convert(
+    input: &Path,
+    frequencies: &[PathBuf],
+    output: &Path,
+) -> Result<Converted, ConvertError> {
     let source = std::fs::read_to_string(input)?;
     if !looks_like_rime(&source) {
         return Err(ConvertError::Format {
@@ -42,16 +46,25 @@ pub fn convert(input: &Path, frequency: &Path, output: &Path) -> Result<Converte
             reason: "expected a Rime .dict.yaml (a `---` header or a `name:` line)".to_owned(),
         });
     }
-    let dictionary = Dictionary::from_path(frequency)?;
-    let frequencies: HashMap<&str, u32> = dictionary
-        .entries()
-        .map(|hit| (hit.text, hit.frequency))
-        .collect();
+    // 基础词库加随包的领域词库：词的语料词频与它收在哪一本里无关，同一个词取最大的那份
+    let dictionaries: Vec<Dictionary> = frequencies
+        .iter()
+        .map(Dictionary::from_path)
+        .collect::<Result<_, _>>()?;
+    let mut table: HashMap<&str, u32> = HashMap::new();
+    for dictionary in &dictionaries {
+        for hit in dictionary.entries() {
+            let slot = table.entry(hit.text).or_insert(hit.frequency);
+            *slot = (*slot).max(hit.frequency);
+        }
+    }
 
     let tsv = to_tsv(&source).tsv;
     let mut entries: Vec<(String, String, u32)> = Vec::new();
     for (index, raw) in tsv.lines().enumerate() {
-        let line = raw.trim();
+        // 只去尾部空白：词字段可能是空的（源表里 全角空格 那条以制表符开头），
+        // 整行 trim 会把开头的制表符吃掉、后面的列整体左移，编码被当成词
+        let line = raw.trim_end();
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
@@ -67,7 +80,7 @@ pub fn convert(input: &Path, frequency: &Path, output: &Path) -> Result<Converte
         if word.is_empty() || code.is_empty() {
             continue;
         }
-        let weight = frequencies.get(word).copied().unwrap_or(UNKNOWN_FREQUENCY);
+        let weight = table.get(word).copied().unwrap_or(UNKNOWN_FREQUENCY);
         entries.push((word.to_owned(), code, weight));
     }
     // 按 (编码, 词频降序, 词) 排：与 `CodeTable` 在内存里的顺序一致，文件本身也一眼看得出排序；
@@ -86,7 +99,7 @@ pub fn convert(input: &Path, frequency: &Path, output: &Path) -> Result<Converte
     let mut writer = BufWriter::new(std::fs::File::create(output)?);
     writeln!(
         writer,
-        "# 形码码表：词\t编码\t词频。词频由青简词库（assets/lexicon/dict.tsv）按词面回填，不是码表自带的权重"
+        "# 形码码表：词\t编码\t词频。词频由青简词库按词面回填（不是码表自带的权重），出处见 assets/wubi/README.md"
     )?;
     for (word, code, frequency) in &entries {
         writeln!(writer, "{word}\t{code}\t{frequency}")?;
@@ -131,7 +144,7 @@ name: wubi86
         let out_path = dir.join("wubi86.tsv");
         std::fs::write(&table_path, table).unwrap();
         std::fs::write(&dict_path, dict).unwrap();
-        let converted = convert(&table_path, &dict_path, &out_path).unwrap();
+        let converted = convert(&table_path, std::slice::from_ref(&dict_path), &out_path).unwrap();
         let lines: Vec<String> = std::fs::read_to_string(&out_path)
             .unwrap()
             .lines()
@@ -181,12 +194,55 @@ name: wubi86
     }
 
     #[test]
+    fn skips_rows_whose_word_field_is_empty() {
+        // 极点码表里 全角空格 那条就是这个形状：词字段是空的全角空格，行以制表符开头。
+        // 整行 trim 会把制表符吃掉，变成「编码 cokg 的词频 10」这种垃圾条目。
+        let (lines, converted) = convert_to_strings(
+            "empty-word",
+            "---\nname: t\n...\n\tcokg\t10\t全角空格\n开\tga\t80\n",
+            DICT,
+        );
+        assert_eq!(lines, ["开\tga\t800"]);
+        assert_eq!(converted.entries, 1);
+    }
+
+    #[test]
     fn rejects_files_that_are_not_rime_dictionaries() {
         let dir = scratch("not-rime");
         let table = dir.join("plain.tsv");
         let dict_path = dir.join("dict.tsv");
         std::fs::write(&table, "开\tga\t800\n").unwrap();
         std::fs::write(&dict_path, DICT).unwrap();
-        assert!(convert(&table, &dict_path, &dir.join("out.tsv")).is_err());
+        assert!(
+            convert(
+                &table,
+                std::slice::from_ref(&dict_path),
+                &dir.join("out.tsv")
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn takes_the_highest_frequency_across_dictionaries() {
+        // 基础词库没有 葡萄牙，领域词库有：两本都传进去就该命中，取大的那份
+        let dir = scratch("multi");
+        let table_path = dir.join("table.dict.yaml");
+        let base_path = dir.join("dict.tsv");
+        let domain_path = dir.join("places.tsv");
+        let out_path = dir.join("wubi86.tsv");
+        std::fs::write(&table_path, "---\nname: t\n...\n葡萄牙\taaah\t20\n").unwrap();
+        std::fs::write(&base_path, "开\tkai\t800\n").unwrap();
+        std::fs::write(&domain_path, "葡萄牙\tpu tao ya\t300\n").unwrap();
+        let converted = convert(&table_path, &[base_path, domain_path], &out_path).unwrap();
+        assert_eq!(converted.with_frequency, 1);
+        assert_eq!(
+            std::fs::read_to_string(&out_path)
+                .unwrap()
+                .lines()
+                .filter(|l| !l.starts_with('#'))
+                .collect::<Vec<_>>(),
+            ["葡萄牙\taaah\t300"]
+        );
     }
 }

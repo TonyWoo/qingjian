@@ -131,6 +131,7 @@ scheme = "pinyin"   # pinyin | xiaohe | ziranma | microsoft | sogou | zhuyin | w
 | 2 | `dict-convert wubi` + 词频回填 + `pack code` + 许可署名 | 1–2 天 |
 | | 　└ `dict-convert wubi` 与词频回填**已做**（2026-09-15，读 Rime `.dict.yaml`，词频按词面从青简词库回填，4 个用例）；剩下载码表、`Kind::Code` 打包与许可署名 | |
 | 3 | `[general] scheme` 收敛 + 配置迁移 + Windows 设置页与状态条 | 2–3 天 |
+| | 　└ 壳真带上码表时，署名要同步：`bundle.sh` 是**按文件白名单**拷数据的（`assets/wubi/` 现在一个都没拷），偏好设置「关于」页的 `ATTRIBUTIONS` 也是照随包数据列的一份。现在两处都没加，因为 macOS 侧还没有输入方案，包里带它只是白占体积 | |
 | 4 | 释义 / 生词 / 统计 / 日志对齐验证、输入日志 `scheme` 进回放、`docs/user/input/` 加页 | 1–2 天 |
 
 合计约 1.5–2 周（单人，不含真机来回）。
