@@ -358,8 +358,8 @@ impl Host {
             // 弹出菜单按 Scheme::ALL 的顺序。写的是 [general] scheme（旧键 shuangpin 已并入它）：
             // 写旧键的话，配置里 scheme 的缺省值非空、解析时优先，用户选的方案会被静默忽略。
             (Setting::Scheme, SettingValue::Index(index)) => {
-                let key = index
-                    .and_then(|i| Scheme::ALL.get(i))
+                let key = Scheme::ALL
+                    .get(index)
                     .map_or(Scheme::Pinyin.key(), |scheme| scheme.key());
                 self.settings.set_value("general", "scheme", key);
             }
