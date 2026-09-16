@@ -206,7 +206,7 @@ fn main() {
         page_keys = %format!("{}{}", router_config.page_keys.0, router_config.page_keys.1),
         layout = router_config.layout.key(),
         theme = router_config.theme.key(),
-        shuangpin = config.general.shuangpin().map(|s| s.key()).unwrap_or("全拼"),
+        scheme = config.general.scheme().label(),
         fuzzy = config.fuzzy.any(),
         cloud = config.predict.enabled,
         model = model_path.as_deref().map(|p| p.display().to_string()).unwrap_or_default(),
