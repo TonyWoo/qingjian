@@ -31,7 +31,10 @@ struct Entry {
 }
 
 /// 形码码表。词目按 `(编码, 词频降序)` 排好，同前缀的是一段连续区间。
-#[derive(Debug, Default)]
+///
+/// `Clone` 是给回放用的：`Engine::set_code_table` 收所有权，而回放要在方案之间来回切，
+/// 手里得留一份（整份日志通常只有一套方案，切的次数很少）。
+#[derive(Debug, Default, Clone)]
 pub struct CodeTable {
     /// 按编码字节序升序，同一个编码下按词频降序。
     entries: Vec<Entry>,

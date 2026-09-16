@@ -45,7 +45,10 @@ fn run() -> Result<(), CliError> {
     engine.set_english_mode(args.english_mode);
     tuning::apply(&mut engine, &args.tune)?;
     if let Some(path) = &args.replay {
-        let report = replay::run(&mut engine, path, args.misses)?;
+        // 日志里形码那些行也要能重放：回放按每条的方案切引擎，所以它自己得留一份码表
+        // （`build_engine` 那份的所有权已经交给引擎了）
+        let code_table = args.wubi.as_ref().map(CodeTable::from_path).transpose()?;
+        let report = replay::run(&mut engine, path, args.misses, code_table)?;
         print!("{report}");
         return Ok(());
     }

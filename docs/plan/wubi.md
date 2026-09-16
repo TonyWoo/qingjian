@@ -134,6 +134,7 @@ scheme = "pinyin"   # pinyin | xiaohe | ziranma | microsoft | sogou | zhuyin | w
 | | 　└ **已做**（2026-09-16）：`Scheme` 枚举与 `[general] scheme`；旧键 `shuangpin` / `zhuyin` 读取时推断（不自动改写文件）；CLI、macOS 偏好设置与 Windows 设置页/Server/状态条都改成读写新键；Windows Server 按方案装载码表（用户目录优先、随包 `data/wubi/` 兜底，找不到只警告并按拼音跑）。打包与 macOS 接入**也已做**（2026-09-16 续）：`bundle.sh` 拷进 `Resources/wubi/`、Windows 安装器拷进 `{app}\data\wubi\`，两处署名（macOS / Windows 的「关于」页）都补了；macOS 的偏好设置那栏换成「输入方案」下拉（`Scheme::ALL`），`apply_config` 里一并设注音与码表——macOS 侧因此顺带把一直没接的**大千注音**也接上了。**还差**：macOS 与 Windows 的真机验证 | |
 | | 　└ 壳真带上码表时，署名要同步：`bundle.sh` 是**按文件白名单**拷数据的（`assets/wubi/` 现在一个都没拷），偏好设置「关于」页的 `ATTRIBUTIONS` 也是照随包数据列的一份。现在两处都没加，因为 macOS 侧还没有输入方案，包里带它只是白占体积 | |
 | 4 | 释义 / 生词 / 统计 / 日志对齐验证、输入日志 `scheme` 进回放、`docs/user/input/` 加页 | 1–2 天 |
+| | 　└ **已做**（2026-09-16）：回放按每条日志的方案切换（`SchemeSwitcher`，形码要有 `--wubi` 的码表）；释义 / 生词 / 词汇记录 / 输入统计在形码下照常，有测试钉住（`code_commits_still_feed_translations_vocabulary_and_usage`）；`docs/user/` 的按键表、拼写纠错、英文模式、偏好设置、模糊音与输入方案各页都补了五笔 | |
 
 合计约 1.5–2 周（单人，不含真机来回）。
 
