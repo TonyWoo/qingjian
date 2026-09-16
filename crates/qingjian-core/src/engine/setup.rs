@@ -54,6 +54,18 @@ impl Engine {
         self.code.is_some()
     }
 
+    /// 拼音侧参不参与查询。形码开着时把它关掉就是「只用形码」（`[general] scheme = "none"`）；
+    /// 两边都开是混输，见 [`Self::set_code_table`] 与 [`Self::query_mixed`]。
+    pub fn set_phonetic(&mut self, on: bool) {
+        self.phonetic = on;
+        *self.correction_cache.borrow_mut() = None;
+        self.forget_span_cache();
+    }
+
+    pub fn is_phonetic(&self) -> bool {
+        self.phonetic
+    }
+
     /// 判斷注音模式下目前是否還需要輸入聲調。
     /// 供殼（平台層）用來判斷空白鍵是應該進緩衝區作為聲調，還是直接用來選詞。
     pub fn zhuyin_needs_tone(&self) -> bool {

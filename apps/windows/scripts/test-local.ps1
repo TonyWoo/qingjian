@@ -94,7 +94,11 @@ if ($LASTEXITCODE -ge 8) { throw "robocopy 失败（exit $LASTEXITCODE）" }
 Copy-Item -LiteralPath $server -Destination $WorkDir -Force
 New-Item -ItemType Directory -Force -Path (Join-Path $WorkDir 'assets\wubi') | Out-Null
 Copy-Item -LiteralPath $table -Destination (Join-Path $WorkDir 'assets\wubi') -Force
-Write-Host '   新 Server 与五笔码表已就位'
+# DLL 也拷过来再注册：从 `target\debug` 注册的话，那个文件会被加载它的进程锁住，
+# 之后 `cargo build` 写不进去（链接报 LNK1104，看着像代码坏了）
+$workDll = Join-Path $WorkDir 'qingjian_tsf.dll'
+Copy-Item -LiteralPath $dll -Destination $workDll -Force
+Write-Host '   新 Server、TSF DLL 与五笔码表已就位'
 
 $elevated = [Security.Principal.WindowsPrincipal]::new(
     [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -103,13 +107,13 @@ $elevated = [Security.Principal.WindowsPrincipal]::new(
 if (-not $SkipRegister) {
     Write-Host '== 注册 TSF DLL' -ForegroundColor Cyan
     if ($elevated) {
-        & regsvr32.exe /s $dll
-        if ($LASTEXITCODE -ne 0) { throw "regsvr32 失败（exit $LASTEXITCODE）：$dll" }
+        & regsvr32.exe /s $workDll
+        if ($LASTEXITCODE -ne 0) { throw "regsvr32 失败（exit $LASTEXITCODE）：$workDll" }
         Write-Host '   已注册新 DLL'
     }
     else {
         Write-Host '   不是管理员，请另开一个管理员 PowerShell 跑：' -ForegroundColor Yellow
-        Write-Host "     regsvr32 `"$dll`"" -ForegroundColor Yellow
+        Write-Host "     regsvr32 `"$workDll`"" -ForegroundColor Yellow
     }
 }
 
@@ -124,9 +128,11 @@ Write-Host '  1. 看日志确认两边都对了（应该有两行「形码码表
 Write-Host "       Get-Content `"$logs\qingjian-server.*.log`" -Tail 20"
 Write-Host '     entries=89256 是码表；词库那行应该是一万以上，不是 148（148 说明落到样例数据了）。'
 Write-Host ''
-Write-Host '  2. 设成五笔，改这一行（保存即热加载，不用重启）：'
+Write-Host '  2. 改配置（保存即热加载，不用重启）。拼音与形码是两条独立的轴：'
 Write-Host "       $config"
-Write-Host '       [general] 段里   scheme = "wubi86"'
+Write-Host '       只用五笔           scheme = "none"    wubi = "wubi86"'
+Write-Host '       五笔 + 全拼混输     scheme = "pinyin"  wubi = "wubi86"'
+Write-Host '       只用双拼           scheme = "xiaohe"  wubi = ""'
 Write-Host ''
 Write-Host '  3. 关掉记事本再打开（已经在跑的进程手里攥着旧 DLL，注册新的对它没用），切到青简。'
 Write-Host ''
@@ -136,15 +142,18 @@ Write-Host '       v      → 发（重点：不该冒出「v1+2 → 3」那种�
 Write-Host '       ga     → 开 排在 开发 前面'
 Write-Host '       khlg   → 中国'
 Write-Host '       ggll   → 一'
-Write-Host '     再看候选右侧有没有译文小字、悬浮状态条第一格是不是「中 · 五笔（86）」。'
+Write-Host '       混输时：nihao 出「你好」（五笔查不到就落到拼音），第 5 个字母起自动只剩拼音'
+Write-Host '     再看候选右侧有没有译文小字、悬浮状态条第一格是不是方案名（混输是「五笔（86） + 全拼」）。'
 Write-Host ''
 $installedDll = Get-ChildItem -LiteralPath $InstallDir -Filter 'qingjian_tsf-*.dll' -ErrorAction SilentlyContinue |
     Select-Object -First 1 -ExpandProperty FullName
 Write-Host '回滚：注销新 DLL，再注册装好的那个'
-Write-Host "      regsvr32 /u `"$dll`""
+Write-Host "      regsvr32 /u `"$workDll`""
 if ($installedDll) {
     Write-Host "      regsvr32 `"$installedDll`""
 }
 else {
     Write-Host "      （$InstallDir 下没找到 qingjian_tsf-*.dll，回滚时用安装包重装一遍）"
 }
+
+#regsvr32 "C:\OpenSource\qingjian\target\debug\qingjian_tsf.dll"

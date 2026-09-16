@@ -49,8 +49,11 @@ pub struct RouterConfig {
     /// 状态条记住的位置（`[status_bar] x` / `y`，内容左上角物理像素）。
     pub status_pos: Option<(i32, i32)>,
 
-    /// 输入方案（`[general] scheme`）：状态条显示用，装配引擎要看的是 `engine.scheme()`。
+    /// 拼音侧方案（`[general] scheme`）。
     pub scheme: Scheme,
+
+    /// 形码侧开没开（`[general] wubi`）。与拼音同时开着就是混输。
+    pub wubi: bool,
 }
 
 impl RouterConfig {
@@ -82,6 +85,7 @@ impl From<&Config> for RouterConfig {
             status_enabled: config.status_bar.enabled,
             status_pos: config.status_bar.x.zip(config.status_bar.y),
             scheme: config.general.scheme(),
+            wubi: config.general.wubi(),
         }
     }
 }

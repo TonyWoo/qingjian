@@ -20,8 +20,11 @@ pub struct GeneralPage {
     /// 每页候选数。
     page_size: Retained<NSPopUpButton>,
 
-    /// 输入方案（按 `Scheme::ALL` 的顺序）。
+    /// 拼音方案（按 `Scheme::ALL` 的顺序）。
     scheme: Retained<NSPopUpButton>,
+
+    /// 五笔（86 版形码）；与拼音方案同时开着就是混输。
+    wubi: Retained<NSButton>,
 
     /// 英文模式也给候选。
     english: Retained<NSButton>,
@@ -74,7 +77,7 @@ impl GeneralPage {
         let scheme = row_popup(
             layout,
             mtm,
-            "输入方案",
+            "拼音方案",
             &scheme_titles,
             Setting::Scheme,
             target,
@@ -82,7 +85,14 @@ impl GeneralPage {
         note(
             layout,
             mtm,
-            "双拼与注音下 v、u、i 是音节键，表达式与问字模式只能用 ? 开头进；五笔下候选按编码前缀查，整句、模糊音、拼写纠错与中英混输都不生效。",
+            "全拼、四套双拼、大千注音，或关（只用下面的五笔）。双拼与注音下 v、u、i 是按键，表达式与问字模式只能用 ? 开头进。",
+        );
+        let wubi = checkbox(mtm, "五笔（86 版）", Setting::Wubi, target);
+        row_checkbox(layout, &wubi);
+        note(
+            layout,
+            mtm,
+            "与拼音方案同时开着就是混输：五笔候选在前，打不出的字直接打拼音。单用五笔请把拼音方案关掉；第 5 个字母起五笔查不到东西，自动只剩拼音。",
         );
         let punctuation = row_popup(
             layout,
@@ -125,6 +135,7 @@ impl GeneralPage {
             learning_language,
             page_size,
             scheme,
+            wubi,
             english,
             english_off_in_apps,
             languages: languages.to_vec(),
@@ -154,6 +165,7 @@ impl GeneralPage {
                     .unwrap_or(0),
             ),
         );
+        set_checked(&self.wubi, general.wubi());
         set_checked(&self.english, general.english_candidates);
         set_checked(
             &self.english_off_in_apps,

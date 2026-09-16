@@ -1,7 +1,7 @@
 use qingjian_core::ShuangpinScheme;
 use serde::{Deserialize, Serialize};
 
-use super::scheme::Scheme;
+use super::scheme::{Scheme, scheme_label};
 use super::{LayoutMode, LogLevel, PreeditMode, ThemeMode};
 
 /// 每页最多几个候选：数字键只有 1–9。
@@ -47,9 +47,12 @@ pub struct GeneralConfig {
     /// 英文模式下的同一件事，中英各记一份；缺省半角。只有 Windows 用（macOS 英文模式一律半角）。
     pub english_full_width_punctuation: bool,
 
-    /// 输入方案：`pinyin`（全拼，缺省）/ `xiaohe` / `ziranma` / `microsoft` / `sogou` / `zhuyin` / `wubi86`，
-    /// 见 [`Scheme`]。用不认识的写法时按全拼并警告。
+    /// 拼音侧方案：`pinyin`（全拼，缺省）/ `xiaohe` / `ziranma` / `microsoft` / `sogou` / `zhuyin`
+    /// / `none`（关，只用形码），见 [`Scheme`]。用不认识的写法时按全拼并警告。
     pub scheme: String,
+
+    /// 形码侧方案：空串为关，`wubi86` 为五笔（86 版）。**与拼音同时开着就是混输**，见 [`Self::mixed`]。
+    pub wubi: String,
 
     /// 旧键（2026-09-16 之前是 `[general] shuangpin`，空串为全拼）：只在 [`Self::scheme`] 里用来推断方案，
     /// 不再写出去；`scheme` 写了值就不看它。当时 `shuangpin` 与 `zhuyin` 是两个字段表达同一个维度。
@@ -79,6 +82,7 @@ impl Default for GeneralConfig {
             full_width_punctuation: true,
             english_full_width_punctuation: false,
             scheme: Scheme::default().key().to_owned(),
+            wubi: String::new(),
             shuangpin: None,
             zhuyin: None,
             log_level: LogLevel::default(),
@@ -88,14 +92,14 @@ impl Default for GeneralConfig {
 }
 
 impl GeneralConfig {
-    /// 输入方案。`scheme` 没写时用旧键（`shuangpin` / `zhuyin`）推，都没有就是全拼。
+    /// 拼音侧方案。`scheme` 没写时用旧键（`shuangpin` / `zhuyin`）推，都没有就是全拼。
     pub fn scheme(&self) -> Scheme {
         let key = self.scheme.trim();
         if !key.is_empty() {
             return match key.parse() {
                 Ok(scheme) => scheme,
                 Err(_) => {
-                    tracing::warn!(key, "不认识的输入方案，按全拼");
+                    tracing::warn!(key, "不认识的拼音方案，按全拼");
                     Scheme::Pinyin
                 }
             };
@@ -135,6 +139,31 @@ impl GeneralConfig {
     /// 当前方案是不是大千注音。
     pub fn is_zhuyin(&self) -> bool {
         self.scheme() == Scheme::Zhuyin
+    }
+
+    /// 形码侧（五笔）开没开。`wubi` 认 `wubi86`；认不出来时警告并按关。
+    /// 旧配置把五笔写在 `scheme` 里（`wubi86`），那时等价于「拼音关 + 五笔开」，[`Self::scheme`] 会解成
+    /// [`Scheme::Off`]，这里跟着认下来，免得老配置升级后两个轴都关着、一个候选都不出。
+    pub fn wubi(&self) -> bool {
+        let key = self.wubi.trim();
+        if key.is_empty() || key == "off" || key == "none" {
+            return matches!(self.scheme.trim(), "wubi" | "wubi86");
+        }
+        if key == "wubi86" {
+            return true;
+        }
+        tracing::warn!(key, "不认识的形码方案，按关");
+        false
+    }
+
+    /// 拼音与形码同时开着 = 混输：两边都出候选，形码在前。
+    pub fn mixed(&self) -> bool {
+        self.scheme().is_on() && self.wubi()
+    }
+
+    /// 状态条上显示的输入方案名；见 [`scheme_label`]。
+    pub fn scheme_label(&self) -> String {
+        scheme_label(self.scheme(), self.wubi())
     }
 
     /// 夹到合法范围的每页候选数。
@@ -189,11 +218,49 @@ mod tests {
         assert_eq!(general.shuangpin(), Some(ShuangpinScheme::Xiaohe));
         general.scheme = " Sogou ".to_owned();
         assert_eq!(general.shuangpin(), Some(ShuangpinScheme::Sogou));
-        general.scheme = "wubi86".to_owned();
-        assert_eq!(general.scheme(), Scheme::Wubi86);
-        assert!(general.scheme().is_code());
+        general.scheme = "none".to_owned();
+        assert_eq!(general.scheme(), Scheme::Off);
+        assert!(!general.scheme().is_on());
         general.scheme = "flypy".to_owned();
         assert_eq!(general.scheme(), Scheme::Pinyin);
+    }
+
+    #[test]
+    fn the_two_axes_are_independent_and_their_combination_is_mixed_input() {
+        let mut general = GeneralConfig::default();
+        // 缺省：全拼，不开形码
+        assert_eq!(general.scheme(), Scheme::Pinyin);
+        assert!(!general.wubi());
+        assert!(!general.mixed());
+
+        // 双拼 alone
+        general.scheme = "xiaohe".to_owned();
+        assert!(!general.mixed());
+        // 五笔 alone：拼音侧关掉
+        general.scheme = "none".to_owned();
+        general.wubi = "wubi86".to_owned();
+        assert!(general.wubi());
+        assert!(!general.mixed());
+        // 组合：两边都开 = 混输
+        general.scheme = "xiaohe".to_owned();
+        assert!(general.mixed());
+        // 形码写得不认识：按关，且不影响拼音侧
+        general.wubi = "wubi98".to_owned();
+        assert!(!general.wubi());
+        assert_eq!(general.scheme(), Scheme::Shuangpin(ShuangpinScheme::Xiaohe));
+    }
+
+    #[test]
+    fn the_old_wubi_scheme_spelling_still_turns_wubi_on() {
+        // 2026-09-16 之前五笔是 `scheme = "wubi86"`（单选）。升级后两个轴都得跟上，
+        // 否则老配置会变成「拼音关 + 形码关」，一个字都打不出来。
+        let general = GeneralConfig {
+            scheme: "wubi86".to_owned(),
+            ..GeneralConfig::default()
+        };
+        assert_eq!(general.scheme(), Scheme::Off);
+        assert!(general.wubi());
+        assert!(!general.mixed());
     }
 
     #[test]

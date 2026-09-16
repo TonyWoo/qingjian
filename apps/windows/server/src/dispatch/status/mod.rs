@@ -7,7 +7,7 @@ mod event;
 mod sink;
 mod view;
 
-use qingjian_platform::{Config, Scheme};
+use qingjian_platform::{Config, Scheme, scheme_label};
 
 pub use self::event::StatusEvent;
 pub use self::sink::{NoopStatusSink, StatusSink};
@@ -91,8 +91,9 @@ impl Router {
                 self.status.show_status(StatusView {
                     english,
                     zhuyin: self.config.scheme == Scheme::Zhuyin,
-                    scheme: (self.config.scheme != Scheme::Pinyin)
-                        .then(|| self.config.scheme.label().to_owned()),
+                    // 现算，不存下来：存了会与 scheme / wubi 冗余、手搓配置的地方就漂移
+                    scheme: Some(scheme_label(self.config.scheme, self.config.wubi))
+                        .filter(|label| !label.is_empty()),
                     full_width: self.full_width_for(english),
                     theme: self.config.theme,
                     anchor: self.config.status_pos,

@@ -3,10 +3,19 @@
 use super::*;
 
 /// 五笔 86 的一小段：一级简码 V 是 发，`ggll` 是 一。
-const CODES: &str =
-    "一\tggll\t90000\n发\tv\t30000\n到\tgc\t20000\n来\tgo\t15000\n开\tga\t5000\n开发\tgant\t900\n";
+/// `甲` 的编码故意取成 `kai`——与拼音的 开 同形，用来验混输时的排序。
+const CODES: &str = "一\tggll\t90000\n发\tv\t30000\n到\tgc\t20000\n来\tgo\t15000\n开\tga\t5000\n开发\tgant\t900\n甲\tkai\t1000\n";
 
+/// 只用形码：拼音侧关掉，候选只从码表来。
 fn wubi() -> Engine {
+    let mut engine = engine();
+    engine.set_code_table(Some(CodeTable::parse(CODES).unwrap()));
+    engine.set_phonetic(false);
+    engine
+}
+
+/// 混输：形码与拼音两边都出候选。
+fn mixed() -> Engine {
     let mut engine = engine();
     engine.set_code_table(Some(CodeTable::parse(CODES).unwrap()));
     engine
@@ -131,6 +140,38 @@ fn code_commits_still_feed_translations_vocabulary_and_usage() {
         .get(&(Language::English, "develop".to_owned()))
         .expect("译词应当进了词汇记录");
     assert_eq!((entry.1, entry.2), (1, 0));
+}
+
+#[test]
+fn mixed_input_puts_code_candidates_before_pinyin_ones() {
+    let mut engine = mixed();
+    // `kai`：码表里有 甲，拼音那边有 开 一族——两边都命中。
+    // 只断言「形码在前、拼音也在」，不写死拼音侧的名次（那是它自己那些测试的事）
+    let texts = code_texts(&mut engine, "kai");
+    assert_eq!(texts.first().map(String::as_str), Some("甲"));
+    assert!(texts.contains(&"开".to_owned()));
+}
+
+#[test]
+fn turning_the_pinyin_side_off_leaves_only_the_code_table() {
+    let mut engine = wubi();
+    assert_eq!(code_texts(&mut engine, "kai"), ["甲"]);
+}
+
+#[test]
+fn a_longer_input_drops_the_code_side_by_itself() {
+    // 五笔码最长 4 位：从第 5 个字母起形码查不到东西，混输下自然只剩拼音
+    let mut engine = mixed();
+    let texts = code_texts(&mut engine, "kaifa");
+    assert!(texts.contains(&"开发".to_owned()));
+    assert!(!texts.contains(&"甲".to_owned()));
+}
+
+#[test]
+fn mixed_input_falls_back_to_the_code_side_when_pinyin_cannot_read_it() {
+    // `ggll` 切不成音节，但码表有 一：混输不该因为拼音读不出来就整个失败
+    let mut engine = mixed();
+    assert_eq!(code_texts(&mut engine, "ggll"), ["一"]);
 }
 
 #[test]

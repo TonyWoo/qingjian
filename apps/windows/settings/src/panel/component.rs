@@ -41,6 +41,7 @@ impl Component for Settings {
             Message::Scheme(Some(i)) if i < general::SCHEMES.len() => {
                 self.save("general", "scheme", general::SCHEMES[i].1);
             }
+            Message::Wubi(on) => self.save("general", "wubi", if on { "wubi86" } else { "" }),
             Message::EnglishCandidates(on) => self.save("general", "english_candidates", on),
             Message::FullWidthPunctuation(on) => {
                 self.save("general", "full_width_punctuation", on);

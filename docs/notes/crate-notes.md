@@ -20,9 +20,12 @@ TSV 解析、查询与生成工具把 `lue` / `nue` 统一成 `lve` / `nve`。
 模块：`composition` / `parser` / `correction`（拼写纠错：整段一处编辑的候选纠正 + `typo` 音节级敲错变体表，后者进整句词图当带代价的边）/
 `candidate` / `ranking` / `shortcut` / `sentence` / `fuzzy` / `shuangpin`（双拼：四套方案键位表、键 → 全拼解码与消耗换算）/ `zhuyin`（大千注音：键 → 注音符号 → 拼音，`[general] zhuyin` 开关，声调只判音节完整不进查询）/ `emoji` /
 `english`（英文模式候选）/ `engine`（`query::EnglishTail`：句末英文词并入整句，`woxiangxuehaorust` → 我想学好rust，尾段也像拼音时按分数与拼音读法比）。
-形码（五笔）在 `engine::query::code`：`Engine::set_code_table` 挂上码表后，`query_inner` 在进切分之前分岔到 `query_code`，
+形码（五笔）在 `engine::query::code`。`Engine` 上有两个开关：`set_code_table`（码表）与 `set_phonetic`（拼音侧参不参与），
+在 `query_inner` 进切分之前按这两个分派——只有拼音 / 只有形码（`query_code`）/ **两边都开（`query_mixed`，混输）**。
 编码按前缀查表，`CandidateKind::Code` 的候选 `syllables` 为空、上屏吃掉整段作用域（`whole_scope`）。
-拼音那套在形码下全部不适用，靠 `modes()` 返回 `ModeKeys::LETTERLESS` 与 `active_correction` 直接返回 `None` 关掉；
+混输是「拼音那条 Query 前面插上形码候选」：拼音读不出来时（`ggll`）整个按形码走，两边都空才算错；
+按文本去重、形码在前（编码精确，混输就是「五笔打不出的才打拼音」），且五笔码最长 4 位、第 5 个字母起自然只剩拼音。
+拼音那套在纯形码下全部不适用，靠 `modes()` 返回 `ModeKeys::LETTERLESS` 与 `active_correction` 直接返回 `None` 关掉；
 译词标注、生词记录、输入日志、用户选择学习与个人 n-gram 仍照常工作。
 `Engine` 是对外唯一门面，`Translator` / `Learner` trait 在 `engine` 模块；词库是「主词库 + 附加词库（`set_extra_dictionaries`）+ 用户词」的列表。
 
@@ -84,10 +87,14 @@ Engine 侧在 `engine/rescoring/`：接了打分器就取 Viterbi 前 `RESCORE_P
 
 ## crates/qingjian-platform
 
-`Scheme`（`config/scheme.rs`）：输入方案全拼 / 双拼四套 / 大千注音 / 五笔，`[general] scheme` 的值。
-2026-09-16 起 `shuangpin` + `zhuyin` 两个旧键并入它（当时是两个字段表达同一个维度）：
-旧键还在 `GeneralConfig` 里以 `Option` 保留，`scheme` 没写时用它们推、写了就不看，文件不自动改写。
-`is_code()` 区分形码，`shuangpin()` 取出双拼方案给引擎装配用。
+输入方案是**两条独立的轴**：`Scheme`（拼音侧：全拼 / 双拼四套 / 大千注音 / 关，`[general] scheme`）
+与 `[general] wubi`（形码侧：空为关 / `wubi86`）。两边都开就是**混输**（`GeneralConfig::mixed`）。
+`scheme_label(pinyin, wubi)` 是状态条显示的方案名（形码在前），做成自由函数而不是存进 `RouterConfig`——
+存了会与那两项冗余、手搓配置的地方就漂移（状态条那条测试正是这么发现的）。
+
+演进：2026-09-16 之前是 `shuangpin` + `zhuyin` 两个键表达同一个维度，先并成单选的 `scheme`，
+同一天又拆成两条轴（单选的 `scheme` 表达不了混输）。旧键（`shuangpin` / `zhuyin` / `scheme = "wubi86"`）
+都还在读、文件不自动改写。
 
 
 `Config`（TOML 配置文件，`[general]` / `[shortcut]` / `[fuzzy]` / `[dictionaries]` / `[apps]` / `[predict]` 分节，首次运行写模板，

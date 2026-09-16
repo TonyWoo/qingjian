@@ -337,6 +337,11 @@ impl Host {
                     .map_or(Scheme::Pinyin.key(), |scheme| scheme.key());
                 self.settings.set_value("general", "scheme", key);
             }
+            // 五笔：勾上就是 86 版，取消就是关。与上面的拼音方案同时开着就是混输。
+            (Setting::Wubi, SettingValue::Bool(on)) => {
+                self.settings
+                    .set_value("general", "wubi", if on { "wubi86" } else { "" });
+            }
             // 文本框失焦也会发 action：值没变就不写，免得每次切窗口都重写一遍配置
             (Setting::BaseUrl, SettingValue::Text(text)) => {
                 let text = text.trim();

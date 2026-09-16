@@ -26,31 +26,36 @@ impl SchemeSwitcher {
         }
     }
 
-    /// 这条日志能不能回放：形码要有码表，别的方案都行。
-    pub fn can_replay(&self, scheme: &str) -> bool {
-        !parse(scheme).is_code() || self.table.is_some()
+    /// 这条日志能不能回放：带形码的要有码表，别的方案都行。
+    pub fn can_replay(&self, key: &str) -> bool {
+        !split(key).1 || self.table.is_some()
     }
 
-    /// 按 `scheme` 装配引擎。双拼与注音的开关每次都设（便宜）；码表只在方案串变了时换。
-    pub fn apply(&mut self, engine: &mut Engine, scheme: &str) {
-        let parsed = parse(scheme);
-        engine.set_shuangpin(parsed.shuangpin());
-        engine.set_zhuyin_mode(parsed == Scheme::Zhuyin);
-        if self.current.as_deref() == Some(scheme) {
+    /// 按 `key` 装配引擎。双拼与注音的开关每次都设（便宜）；码表只在方案串变了时换。
+    pub fn apply(&mut self, engine: &mut Engine, key: &str) {
+        let (pinyin, wubi) = split(key);
+        engine.set_shuangpin(pinyin.shuangpin());
+        engine.set_zhuyin_mode(pinyin == Scheme::Zhuyin);
+        engine.set_phonetic(pinyin.is_on());
+        if self.current.as_deref() == Some(key) {
             return;
         }
-        self.current = Some(scheme.to_owned());
-        engine.set_code_table(if parsed.is_code() {
-            self.table.clone()
-        } else {
-            None
-        });
+        self.current = Some(key.to_owned());
+        engine.set_code_table(if wubi { self.table.clone() } else { None });
     }
 }
 
-/// 日志里的方案串解成 [`Scheme`]；空串与认不出来的都按全拼（老日志里没有这个字段）。
-fn parse(scheme: &str) -> Scheme {
-    scheme.parse().unwrap_or_default()
+/// 日志里的方案串拆成「拼音侧方案 + 形码开没开」：
+/// `"xiaohe+wubi"` → 小鹤 + 开；`"wubi"` → 拼音关 + 开；`""` → 全拼 + 关。
+/// 空串与认不出来的写法都按全拼（老日志里没有这个字段）。
+fn split(key: &str) -> (Scheme, bool) {
+    if let Some(pinyin) = key.strip_suffix("+wubi") {
+        return (pinyin.parse().unwrap_or_default(), true);
+    }
+    if key == "wubi" {
+        return (Scheme::Off, true);
+    }
+    (key.parse().unwrap_or_default(), false)
 }
 
 #[cfg(test)]
@@ -93,14 +98,28 @@ mod tests {
     }
 
     #[test]
-    fn empty_and_unknown_scheme_strings_fall_back_to_pinyin() {
-        // 老日志没有 scheme 字段，解出来是全拼
-        assert_eq!(parse(""), Scheme::Pinyin);
-        assert_eq!(parse("wubi"), Scheme::Wubi86);
+    fn scheme_strings_split_into_the_two_axes() {
+        // 老日志没有 scheme 字段，解出来是全拼、不开形码
+        assert_eq!(split(""), (Scheme::Pinyin, false));
+        assert_eq!(split("没见过的写法"), (Scheme::Pinyin, false));
         assert_eq!(
-            parse("xiaohe"),
-            Scheme::Shuangpin(qingjian_core::ShuangpinScheme::Xiaohe)
+            split("xiaohe"),
+            (
+                Scheme::Shuangpin(qingjian_core::ShuangpinScheme::Xiaohe),
+                false
+            )
         );
-        assert_eq!(parse("没见过的写法"), Scheme::Pinyin);
+        // 只用形码
+        assert_eq!(split("wubi"), (Scheme::Off, true));
+        // 混输：拼音侧那部分照解，形码跟着开
+        assert_eq!(
+            split("xiaohe+wubi"),
+            (
+                Scheme::Shuangpin(qingjian_core::ShuangpinScheme::Xiaohe),
+                true
+            )
+        );
+        assert_eq!(split("pinyin+wubi"), (Scheme::Pinyin, true));
+        assert_eq!(split("zhuyin+wubi"), (Scheme::Zhuyin, true));
     }
 }

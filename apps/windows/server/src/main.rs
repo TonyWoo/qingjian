@@ -185,8 +185,7 @@ fn main() {
         }
     };
     engine.set_fuzzy(config.fuzzy);
-    engine.set_shuangpin(config.general.shuangpin());
-    engine.set_zhuyin_mode(config.general.is_zhuyin());
+    // 拼音侧与形码侧在 `configure_code_table` 里一起装配（双拼 / 注音 / 混输都在那）
     engine.set_mode_keys(config.shortcut.mode);
     engine.log_session(env!("CARGO_PKG_VERSION"), "windows");
     dispatch::attach_cloud(&mut engine, &config.predict);
@@ -206,7 +205,7 @@ fn main() {
         page_keys = %format!("{}{}", router_config.page_keys.0, router_config.page_keys.1),
         layout = router_config.layout.key(),
         theme = router_config.theme.key(),
-        scheme = config.general.scheme().label(),
+        scheme = %if config.general.scheme_label().is_empty() { "全拼".to_owned() } else { config.general.scheme_label() },
         fuzzy = config.fuzzy.any(),
         cloud = config.predict.enabled,
         model = model_path.as_deref().map(|p| p.display().to_string()).unwrap_or_default(),

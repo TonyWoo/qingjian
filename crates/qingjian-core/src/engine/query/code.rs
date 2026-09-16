@@ -1,4 +1,6 @@
-//! 形码查询：编码按前缀查码表，没有切分、没有整句。
+//! 形码查询：编码按前缀查码表，没有切分、没有整句；以及与拼音的混输。
+
+use std::collections::HashSet;
 
 use super::*;
 
@@ -78,5 +80,48 @@ impl Engine {
                 rank,
             },
         }
+    }
+
+    /// 混输：形码与拼音两边都出候选，**形码在前**。
+    ///
+    /// 编码是精确的（四码定字），而混输的典型用法就是「主要用五笔，打不出的字才打拼音」，
+    /// 所以形码命中的排前面。拼音那条路给不出解析时（`ggll` 切不成音节）不算失败——
+    /// 整个查询就按形码的结果走，这也是「第 5 个字母起自动只剩拼音」的另一半：
+    /// 五笔码最长 4 位，再往下敲形码本来就查不到东西。
+    pub(super) fn query_mixed(
+        &self,
+        keys: &str,
+        rest: String,
+        start: Instant,
+    ) -> Result<Query, ParseError> {
+        let code = self.query_code(keys, rest.clone(), start);
+        let mut query = match self.query_phonetic(keys, rest, start) {
+            Ok(query) => query,
+            Err(error) => {
+                // 拼音读不出来，但形码有东西：把形码那条留着，出错只在两边都空时才算
+                if code.candidates.items.is_empty() {
+                    return Err(error);
+                }
+                return Ok(code);
+            }
+        };
+        // 同一个词可能两边都命中（`gant` 既是编码又拼得出什么），按文本去重，形码那条留着
+        let mut seen: HashSet<String> = query
+            .candidates
+            .items
+            .iter()
+            .map(|c| c.text.clone())
+            .collect();
+        let mut combined: Vec<Candidate> =
+            Vec::with_capacity(code.candidates.items.len() + query.candidates.items.len());
+        for candidate in code.candidates.items {
+            if seen.insert(candidate.text.clone()) {
+                combined.push(candidate);
+            }
+        }
+        combined.extend(query.candidates.items);
+        combined.truncate(MAX_CANDIDATES);
+        query.candidates.items = combined;
+        Ok(query)
     }
 }

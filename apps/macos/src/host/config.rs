@@ -18,9 +18,7 @@ impl Host {
             tracing::warn!(%error, "自定义短语配置未应用");
         }
         self.engine.set_mode_keys(config.shortcut.mode);
-        self.engine.set_shuangpin(config.general.shuangpin());
-        self.engine.set_zhuyin_mode(config.general.is_zhuyin());
-        self.apply_scheme(config.general.scheme());
+        self.apply_scheme(config.general.scheme(), config.general.wubi());
         logging::set_level(config.general.log_level);
         self.translation_keys = config.shortcut.translation_keys();
         self.delete_keys = config.shortcut.delete_keys();
@@ -139,10 +137,16 @@ impl Host {
         }
     }
 
-    /// 按输入方案装配：拼音那几套上面已经设好，形码要额外挂码表（不是形码就卸掉）。
-    /// 选了形码却找不到码表时只警告并保持拼音——配置说五笔、引擎还在拼音是静默错位，宁可吵。
-    fn apply_scheme(&mut self, scheme: Scheme) {
-        if !scheme.is_code() {
+    /// 按配置的两条轴装配引擎：拼音侧（全拼 / 双拼 / 注音 / 关）与形码侧（五笔）。
+    /// 两边都开就是混输——形码候选在前，见 `Engine::query_mixed`。
+    ///
+    /// 开了形码却找不到码表时只警告并退回只用拼音——配置说五笔、引擎一个字都打不出更糟。
+    fn apply_scheme(&mut self, pinyin: Scheme, wubi: bool) {
+        self.engine.set_shuangpin(pinyin.shuangpin());
+        self.engine.set_zhuyin_mode(pinyin == Scheme::Zhuyin);
+        // 拼音侧关掉且形码开着才是「只用形码」；两边都关着时留拼音兜底（否则一个候选都没有）
+        self.engine.set_phonetic(pinyin.is_on() || !wubi);
+        if !wubi {
             self.engine.set_code_table(None);
             return;
         }

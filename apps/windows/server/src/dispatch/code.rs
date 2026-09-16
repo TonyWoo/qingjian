@@ -30,10 +30,17 @@ pub fn find_code_table(user_dir: Option<&Path>, bundled_root: &Path) -> Option<P
         })
 }
 
-/// 按 `scheme` 装配引擎的形码码表：不是形码就卸掉；是形码但码表不在就警告并保持拼音。
-/// `table` 是启动时用 [`find_code_table`] 找好的路径（与本地模型一样，热加载时不重新找）。
-fn apply_scheme(engine: &mut Engine, scheme: Scheme, table: Option<&Path>) {
-    if !scheme.is_code() {
+/// 按配置的两条轴装配引擎：拼音侧（全拼 / 双拼 / 注音 / 关）与形码侧（五笔）。
+/// 两边都开就是混输——形码候选在前，见 `Engine::query_mixed`。
+///
+/// 没开形码时把码表卸掉；开了但码表不在就警告并退回只用拼音（配置说五笔、引擎一个字都打不出
+/// 更糟）。`table` 是启动时用 [`find_code_table`] 找好的路径（与本地模型一样，热加载时不重新找）。
+fn apply_scheme(engine: &mut Engine, pinyin: Scheme, wubi: bool, table: Option<&Path>) {
+    engine.set_shuangpin(pinyin.shuangpin());
+    engine.set_zhuyin_mode(pinyin == Scheme::Zhuyin);
+    // 拼音侧关掉且形码开着才是「只用形码」；两边都关着时留拼音兜底（否则一个候选都没有）
+    engine.set_phonetic(pinyin.is_on() || !wubi);
+    if !wubi {
         engine.set_code_table(None);
         return;
     }
@@ -58,18 +65,19 @@ fn apply_scheme(engine: &mut Engine, scheme: Scheme, table: Option<&Path>) {
 }
 
 impl Router {
-    /// 启动时把找好的码表路径交给路由器，并按当前方案装配一次。
+    /// 启动时把找好的码表路径交给路由器，并按当前配置装配一次。
     pub fn configure_code_table(&mut self, table: Option<PathBuf>) {
         self.code_table = table;
         apply_scheme(
             &mut self.engine,
             self.config.scheme,
+            self.config.wubi,
             self.code_table.as_deref(),
         );
     }
 
     /// 热加载：方案变了就按同一个路径重新装配（不重新找文件，与本地模型一致）。
-    pub(super) fn reload_code_table(&mut self, scheme: Scheme) {
-        apply_scheme(&mut self.engine, scheme, self.code_table.as_deref());
+    pub(super) fn reload_code_table(&mut self, pinyin: Scheme, wubi: bool) {
+        apply_scheme(&mut self.engine, pinyin, wubi, self.code_table.as_deref());
     }
 }

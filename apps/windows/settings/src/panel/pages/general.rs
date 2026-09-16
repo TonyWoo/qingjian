@@ -56,14 +56,23 @@ pub(crate) fn view(settings: &Settings, context: &mut ViewContext<Settings>) -> 
                 .on_value_changed(context.callback(Message::PageSize)),
         ),
         field(
-            "输入方案",
-            "全拼、双拼（四套）、大千注音与五笔。双拼与注音下 v、u、i 是按键，表达式与问字模式只能用 ? 开头进；\
-             五笔下候选按编码前缀查，整句、模糊音、拼写纠错与中英混输都不生效，译词与学习照常。",
+            "拼音方案",
+            "全拼、四套双拼、大千注音，或关（只用下面的五笔）。\
+             双拼与注音下 v、u、i 是按键，表达式与问字模式只能用 ? 开头进。",
             string_combo(
                 &SCHEMES,
                 g.scheme().key(),
                 context.callback(Message::Scheme),
             ),
+        ),
+        field(
+            "五笔（86 版）",
+            "与拼音方案同时开着就是混输：五笔候选在前，打不出的字直接打拼音。\
+             单用五笔请把拼音方案关掉；第 5 个字母起五笔查不到东西，自动只剩拼音。\
+             译词、生词记录与学习照常。",
+            ToggleSwitch::new()
+                .is_on(g.wubi())
+                .on_toggled(context.callback(Message::Wubi)),
         ),
         field(
             "中文模式标点转全角",

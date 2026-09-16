@@ -104,9 +104,8 @@ impl Router {
     /// 应用新配置。学习语言变了仍需重启（要换释义表 / 等级表）。
     fn apply_config(&mut self, config: &Config) {
         self.engine.set_fuzzy(config.fuzzy);
-        self.engine.set_shuangpin(config.general.shuangpin());
-        self.engine.set_zhuyin_mode(config.general.is_zhuyin());
-        self.reload_code_table(config.general.scheme());
+        // 拼音侧与形码侧一起装配（双拼 / 注音 / 混输都在里面）
+        self.reload_code_table(config.general.scheme(), config.general.wubi());
         self.engine.set_mode_keys(config.shortcut.mode);
         self.config = RouterConfig::from(config);
         self.reconcile_status();
