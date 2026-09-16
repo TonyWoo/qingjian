@@ -102,7 +102,7 @@ fn run() -> Result<(), ConvertError> {
             &corpus,
             &dict,
             &phrases,
-            brand.as_deref(),
+            &brand,
             min_count,
             max_bigrams,
             &args.out_dir,

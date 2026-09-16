@@ -10,7 +10,8 @@
 （下面以 macOS 为例；Windows 见「Windows 发版」一节，步骤同构。）
 
 1. 改 `apps/macos/Cargo.toml` 的 `version`（`apps/macos` 的 Info.plist 版本号从这里取，pkg 文件名也是）：把 `0.1.2-dev` 改成 `0.1.2`。
-   **发版之间版本号一直带 `-dev`**（Rust nightly / Firefox Nightly 那套）：本地装的、CI 中间构建的都显示 `0.1.2-dev`，版本号干净的一定是线上包；
+   **发版之间版本号一直带 `-dev`**（Rust nightly / Firefox Nightly 那套）：Cargo.toml 写 `0.1.2-dev`，`bundle.sh` 打包时再接上 git 短哈希，
+   本地装的、CI 中间构建的都显示 `0.1.2-dev-1a2b3c4`（工作区有改动加 `+`），测试时一眼知道装的是哪个提交；版本号干净的一定是线上包；
    带 `-dev` 的标签 CI 直接拒绝。pkg 的 `--version` 与 `distribution.xml` 只认数字点号，`bundle.sh` 去掉后缀再传，Info.plist 与 pkg 文件名保留完整版本。
    **各平台壳版本号独立**：macOS 的版本只在 `apps/macos/Cargo.toml`，跟 workspace 与其他壳无关（例：mac 到 `0.1.1`、win 还在 `0.1.0`）。
 2. `CHANGELOG.md` 顶上加一节 `## <版本> · <日期> · <渠道>`（渠道是 `alpha` / `beta` / `rc` / `stable`），一行一条、面向用户的措辞。
@@ -18,7 +19,7 @@
    做法是发版前按上个标签以来的 `git log` 起草几条，人审一遍再定稿。
 3. 提交，打**带平台前缀**的注释标签并推：`git tag -a macos-v0.1.1 -m "青简 macOS 0.1.1" && git push origin main macos-v0.1.1`
    （标签按平台加前缀 `macos-v*` / 将来 `windows-v*`，因为各平台版本号独立、光靠 `v<版本>` 会撞车；旧的 `v*` 标签仍能被官网识别，向后兼容）。
-3b. 标签推出去之后紧接一个普通提交把版本号改成下一个开发版（只是改 Cargo.toml，不打标签、不建 Release；-dev 版本永远没有标签与 Release）：`apps/macos/Cargo.toml` 改成 `0.1.3-dev`（Windows 同理 `0.1.0-alpha.3-dev`），本地从此打的包都带 `-dev`。
+3b. 标签推出去之后紧接一个普通提交把版本号改成下一个开发版（只是改 Cargo.toml，不打标签、不建 Release；-dev 版本永远没有标签与 Release）：`apps/macos/Cargo.toml` 改成 `0.1.3-dev`（Windows 同理 `0.1.3-dev`），本地从此打的包都带 `-dev`。
 4. `release.yml` 跑完后 GitHub Release 上有 `Qingjian-<版本>-arm64.pkg`、`Qingjian-<版本>-x86_64.pkg`、`SHA256SUMS`、`build-info.json`（提交、构建时间、工具链）、`releases.json`。
 5. 官网由 Cloudflare Workers Builds 按官网仓库的提交自动构建，没有可调用的构建钩子，所以主仓库靠**往官网仓库推一个小提交**来触发：
    `tools/release/bump-website.sh` 把版本标签与文档提交号写进官网的 `src/content/upstream.json` 并提交推送（提交者 qingjian-ci）。
@@ -35,7 +36,7 @@ Rust 工具链由 `rust-toolchain.toml` 钉版本（现在 1.96.0），两个 wo
 
 1. 改 `apps/windows/{server,tsf,settings}/Cargo.toml` 的 `version`（三个一起改；打包脚本与 workflow 读 `server` 那份）。
    同样带 `-dev`：发版之间是 `0.1.0-alpha.2-dev`，发版提交改成 `0.1.0-alpha.2`；Inno 的 `VersionInfoVersion` 只认数字，`build.ps1` 把整个预发布后缀去掉再传，安装包与 DLL 文件名保留完整版本。
-   内测版用 semver 预发布号 `0.1.0-alpha.1`、`0.1.0-alpha.2`…：CHANGELOG 按版本号索引、官网按版本号列条目，
+   内测版用 semver 预发布号 `0.1.0-alpha.1`、`0.1.0-alpha.2`（0.1.3 起与 macOS 共用版本号、不再走预发布：一个版本号一节 CHANGELOG，哪个平台发了就打哪个平台的标签，只发一个平台时那一节全是该平台的条目）：CHANGELOG 按版本号索引、官网按版本号列条目，
    与 macOS 的 `0.1.0` / `0.1.1` 不能同号；Inno 的 `VersionInfoVersion` 只认数字，`build.ps1` 会把后缀去掉再传。
 2. `CHANGELOG.md` 加一节 `## 0.1.0-alpha.1 · 日期 · alpha`。
 3. 打标签 `windows-v0.1.0-alpha.1` 推送。`release.yml` 的 `windows` job 在 `windows-latest` 上：核对版本 → 下载 `data` Release
@@ -68,17 +69,22 @@ cargo 命令全 `--locked`（含 `bundle.sh` 与 `build.ps1`）。普通 CI 只�
 
 ## 产品数据从哪来
 
-词库、语言模型、释义表（`data/generated/*.qj`、`dicts/*.qj`、英文词表）不在 git 里，体积约 85 MB 且由本机数据管道生成。
-`tools/release/data-bundle.sh` 把它们打成 `qingjian-data.tar.gz`，把本地整句模型单文件 `data/model/model.qjm`
-（训练仓库导出三件套到 `data/model/`，`tools/release/pack-model.sh` 打成一个 `.qj` 容器，fp16 约 56 MB，元数据也写在那个脚本里）
-原样上传，连同 LLM 生成的续跑中间产物 `qingjian-llm-intermediates.tar.gz` 一起放到仓库里一个名为 `data` 的**预发布** Release
-（预发布不会成为 GitHub 的 latest，官网取 latest 时不会拿到它）。
-`release.yml` 用 `gh release download data` 取回，数据包解到 `data/generated/`、`model.qjm` 放到 `data/model/`；`bundle.sh` 见到 `dict.qj`
-就按产品数据打包、见到 `model.qjm` 就放进 `Resources/model/`，`qingjian.iss` 同理装进 `{app}\data\model`（顺手删掉旧版装的三件套）。
-两者的 SHA-256 都记进 `build-info.json`（`data_sha256` / `model_sha256`）。
+词库、语言模型、释义表（`data/generated/*.qj`、`dicts/*.qj`、英文词表）不在 git 里，体积约 90 MB 且由本机数据管道生成。
+它们发在仓库里一个个**不可变**的预发布 Release 上：`data-v1`、`data-v2`……每次数据重生成发一个新号、从不覆盖
+（预发布不会成为 GitHub 的 latest，官网取 latest 时不会拿到它）。仓库里 `tools/release/data.lock` 钉住当前要用的标签与两个资产的 SHA-256，
+跟用到新数据的代码同一个提交进去：checkout 哪个提交就拿到它对应的那版数据，离线自编译的人不会因为我们改了数据而编出坏包。
 
-数据重生成之后（重跑 lexicon / bigram / gloss-gen export）或模型重训之后要重跑一次 `data-bundle.sh`（三件套比 `.qjm` 新会自动重打），
-否则 CI 打的包还是旧数据。模型文件缺失时 CI 会失败（校验那一步），不会静默地发出不重排的包。
+- `tools/release/data-bundle.sh`：把 `data/generated/` 打成 `qingjian-data.tar.gz`，本地整句模型单文件 `data/model/model.qjm`
+  （训练仓库导出三件套到 `data/model/`，`tools/release/pack-model.sh` 打成一个 `.qj` 容器，fp16 约 56 MB，元数据也写在那个脚本里）原样上传，
+  连同 LLM 续跑中间产物 `qingjian-llm-intermediates.tar.gz` 发到下一个 `data-vN`（`--tag` 可指定，已存在就拒绝），然后改写 `data.lock`。
+- `tools/release/data-fetch.sh`：按 `data.lock` 下载（有 gh 用 gh，没有就 curl 直连）、按锁文件里的哈希校验（不信 Release 自己那份 `SHA256SUMS`），
+  数据包解到 `data/generated/`、`model.qjm` 放到 `data/model/`。`release.yml` 两个 job 和离线自编译走同一个脚本；
+  `bundle.sh` 见到 `dict.qj` 就按产品数据打包、见到 `model.qjm` 就放进 `Resources/model/`，`qingjian.iss` 同理装进 `{app}\data\model`。
+  标签与两个哈希记进 `build-info.json`（`data_tag` / `data_sha256` / `model_sha256`）。
+
+数据重生成之后（重跑 lexicon / bigram / gloss-gen export）或模型重训之后跑一次 `data-bundle.sh`（三件套比 `.qjm` 新会自动重打），
+把锁文件的改动提交（`chore(data): 数据 data-vN`），否则 CI 打的包还是锁文件指的旧数据。模型文件缺失或哈希不符时 CI 会失败，不会静默地发出错数据的包。
+2026-09-16 之前用的是滚动覆盖的 `data` Release，已冻结不再更新。
 
 ## 签名与公证
 

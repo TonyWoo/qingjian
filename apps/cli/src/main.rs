@@ -43,6 +43,7 @@ fn run() -> Result<(), CliError> {
     let mut engine = build_engine(&args)?;
     tracing::info!(total_ms = started.elapsed().as_millis(), "Engine 就绪");
     engine.set_english_mode(args.english_mode);
+    engine.set_chinese_first(args.chinese_first);
     tuning::apply(&mut engine, &args.tune)?;
     if let Some(path) = &args.replay {
         // 日志里形码那些行也要能重放：回放按每条的方案切引擎，所以它自己得留一份码表
@@ -234,6 +235,7 @@ fn build_engine(args: &Args) -> Result<Engine, CliError> {
     if config.fuzzy.any() {
         tracing::info!(rules = ?config.fuzzy, "模糊音已启用");
     }
+    engine.set_traditional_mode(config.general.traditional);
     engine.set_fuzzy(config.fuzzy);
     engine.set_mode_keys(config.shortcut.mode);
     // `--shuangpin` 现在写的是 [general] scheme（同一个维度的旧键已经并进去），off 就是全拼

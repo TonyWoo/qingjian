@@ -60,7 +60,7 @@
   语料 0 次的（微软拼音 / 悬浮条）按规矩没进，要进得另立白名单
 - [ ] 按输入串记的选择只认字面：`wod` 下选的 我的 惠及不到 `wode`；考虑同时按候选全拼记一份、查询取两者最大
 - [ ] 已经学进用户词的错读音云端词（`我的 wo di`、`我的哦 wo di e` 这类）没有清理入口：偏好设置词库页给「按读音核对用户词」，或一次性脚本
-- [ ] 正式版前的发布可信性（2026-09-12 外部 CI 检查，测试版先不做）：产品数据改不可变 tag 并在仓库锁版本 + SHA（现在滚动 `data` Release，只校验 SHA256SUMS）；
+- [ ] 正式版前的发布可信性（2026-09-12 外部 CI 检查，测试版先不做）：产品数据改不可变 tag 并在仓库锁版本 + SHA（2026-09-16 已做：`data-vN` Release + `tools/release/data.lock` + `data-fetch.sh`）；
   安装包内容验证（pkg / Setup.exe 里词库、模型、许可齐不齐，`codesign --verify` / `signtool verify`）；`cargo deny`（许可证 + 来源）；`.qj` 读取器越界 fuzz、`qingjian-format` 跑 Miri
 - [ ] 本地整句模型（已进壳并随包发出，见 `docs/notes/neural-rescoring.md`；加载 12 秒是早期首次 Metal 编译的记录，2026-09-12 装机实测 102 ms，划掉）：
   重排改了切分时应用里的行内拼音要到下一键才更新；日语
@@ -75,6 +75,11 @@
 - [ ] 可选复习（Phase 4）：输入统计、生词识别、词汇统计（含 CEFR / JLPT 等级分布）已做（2026-09-06）；复习容易变成打扰，先不急
 - [ ] 云联想收尾（Phase 6）：密钥进钥匙串（等签名定了再做，ad-hoc 签名每次重装都弹授权）、按应用禁用、限流与用量统计
 - [ ] 个人模型（Phase 7）：小 Transformer 实验（有评测门槛），见 roadmap
+
+- [ ] ★ **主题与自绘渲染器 spike**（2026-09-13 定向，分支 `renderer-spike`，见 [design/rendering.md](../design/rendering.md)）：
+  tiny-skia + cosmic-text 画一行「青简 hello 🙂 日本語」+ 圆角阴影，Windows / macOS 与原生并排截图，验四条：彩色 emoji（sbix / COLRv0）、
+  中日字形回退按 locale、字体按需加载（不扫全系统）、灰度抗锯齿观感；首帧耗时与内存不劣于 GDI / AppKit。过了 Windows + macOS 一起换渲染器、主题文件 TOML；
+  不过退回各平台各自渲染（Windows 走 D2D）。设置程序不自绘。
 
 ## 三、其他平台
 

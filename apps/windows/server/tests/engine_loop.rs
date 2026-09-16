@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use qingjian_core::sentence::SentenceScorer;
-use qingjian_core::{Language, ShuangpinScheme};
+use qingjian_core::{Language, ModeKeys, ShuangpinScheme};
 use qingjian_platform::Scheme;
 use qingjian_platform::protocol::{
     ClientMessage, Frame, KeyEvent, KeyModifiers, KeyOutcome, PROTOCOL_VERSION, ServerMessage,
@@ -52,6 +52,20 @@ fn router_in_app(app: &str) -> Router {
         ..RouterConfig::default()
     };
     router_in(config, Some(app.to_owned()))
+}
+
+/// `?` 开着当问字入口的 Router（配置 `[shortcut] question_mark`，缺省关）。
+fn router_asking() -> Router {
+    router_asking_with(RouterConfig::default())
+}
+
+fn router_asking_with(config: RouterConfig) -> Router {
+    let mut router = router_with(config);
+    router.engine_mut().set_mode_keys(ModeKeys {
+        question_mark: true,
+        ..ModeKeys::default()
+    });
+    router
 }
 
 fn router_in(config: RouterConfig, app: Option<String>) -> Router {
@@ -382,6 +396,36 @@ fn page_keys_follow_config() {
         preedit(&frame).contains(']'),
         "`]` 应进直输段：{}",
         preedit(&frame)
+    );
+}
+
+#[test]
+fn minus_equals_page_keys_preserve_expression_input() {
+    let mut router = router_with(RouterConfig {
+        page_size: 1,
+        page_keys: ('-', '='),
+        ..RouterConfig::default()
+    });
+    let (_, _, frame) = type_letters(&mut router, "ni");
+    assert!(frame.page_count > 1);
+    let (outcome, commit, frame) = press(&mut router, punct('='));
+    assert_eq!((outcome, commit), (KeyOutcome::Consumed, None));
+    assert_eq!(frame.page, 1);
+    assert_eq!(preedit(&frame), "ni");
+    let (_, _, frame) = press(&mut router, punct('-'));
+    assert_eq!(frame.page, 0);
+    assert_eq!(preedit(&frame), "ni");
+    press(&mut router, KeyEvent::new(0x1B, None, Default::default()));
+
+    type_letters(&mut router, "v");
+    for c in "2-1=".chars() {
+        let (outcome, commit, _) = press(&mut router, punct(c));
+        assert_eq!((outcome, commit), (KeyOutcome::Consumed, None));
+    }
+    let (outcome, commit, _) = press(&mut router, punct(' '));
+    assert_eq!(
+        (outcome, commit),
+        (KeyOutcome::Consumed, Some("2-1=1".to_owned()))
     );
 }
 
@@ -923,8 +967,20 @@ fn function_key(virtual_key: u32) -> KeyEvent {
 }
 
 #[test]
-fn bare_question_mark_enters_question_mode_in_both_modes() {
+fn bare_question_mark_is_plain_punctuation_by_default() {
     let mut router = router();
+    // 缺省 `?` 不进问字：中文模式直接出全角问号，英文模式半角。
+    let (outcome, commit, frame) = press(&mut router, punct('?'));
+    assert_eq!(outcome, KeyOutcome::Consumed);
+    assert_eq!(commit.as_deref(), Some("？"));
+    assert!(preedit(&frame).is_empty());
+    let (outcome, commit, _) = press(&mut router, KeyEvent::new(0xBF, Some('?'), ENGLISH));
+    assert_eq!((outcome, commit), (KeyOutcome::Passthrough, None));
+}
+
+#[test]
+fn bare_question_mark_enters_question_mode_in_both_modes() {
+    let mut router = router_asking();
     // 中文模式：`?` 进问字模式不上屏，后面的字母是问题。
     let (outcome, commit, frame) = press(&mut router, punct('?'));
     assert_eq!((outcome, commit), (KeyOutcome::Consumed, None));
@@ -943,7 +999,7 @@ fn bare_question_mark_enters_question_mode_in_both_modes() {
 
 #[test]
 fn bare_question_mark_restores_when_followed_by_other_keys() {
-    let mut router = router();
+    let mut router = router_asking();
     // 空格只是把这个 ? 上屏（中文模式全角），不多打空格。
     press(&mut router, punct('?'));
     let (outcome, commit, frame) = press(&mut router, punct(' '));
@@ -976,7 +1032,7 @@ fn bare_question_mark_restores_when_followed_by_other_keys() {
 
 #[test]
 fn bare_question_mark_is_half_width_when_full_width_is_off() {
-    let mut router = router_with(RouterConfig {
+    let mut router = router_asking_with(RouterConfig {
         full_width: false,
         ..RouterConfig::default()
     });
@@ -987,7 +1043,7 @@ fn bare_question_mark_is_half_width_when_full_width_is_off() {
 
 #[test]
 fn shuangpin_semicolon_stays_in_buffer_in_question_mode() {
-    let mut router = router_with(RouterConfig {
+    let mut router = router_asking_with(RouterConfig {
         scheme: Scheme::Shuangpin(ShuangpinScheme::Microsoft),
         ..RouterConfig::default()
     });

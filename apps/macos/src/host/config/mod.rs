@@ -1,5 +1,11 @@
 //! 配置热加载：config.toml 改了就整份重新套用到 Engine 与窗口；激活期间的定时事务。
 
+mod text_replacements;
+mod watch;
+
+pub(super) use text_replacements::TextReplacement;
+pub(super) use watch::ConfigWatch;
+
 use super::init::load_glossary;
 use super::*;
 
@@ -9,16 +15,14 @@ impl Host {
     pub fn apply_config(&mut self, force: bool) {
         let config = self.settings.config().clone();
         self.engine.set_fuzzy(config.fuzzy);
+        self.engine.set_traditional_mode(config.general.traditional);
         self.engine
             .set_full_width_punctuation(config.general.full_width_punctuation);
-        if let Err(error) = self
-            .engine
-            .set_custom_phrases(config.custom_phrases.clone())
-        {
-            tracing::warn!(%error, "自定义短语配置未应用");
-        }
+        self.apply_custom_phrases(&config);
         self.engine.set_mode_keys(config.shortcut.mode);
+        self.engine.set_chinese_first(config.general.chinese_first);
         self.apply_scheme(config.general.scheme(), config.general.wubi());
+        self.engine.set_learning(config.general.learning);
         logging::set_level(config.general.log_level);
         self.translation_keys = config.shortcut.translation_keys();
         self.delete_keys = config.shortcut.delete_keys();
@@ -31,7 +35,9 @@ impl Host {
         self.apps = config.apps.clone();
         self.window.set_theme(config.general.theme);
         self.window.set_layout(config.general.layout);
-        self.apply_learning_language(&config.general.learning_language);
+        self.window.set_font(&config.general.font);
+        self.window.set_renderer(config.general.renderer);
+        self.apply_learning_language(&config.general);
         if self.input_log_enabled != Some(config.general.input_log) {
             self.input_log_enabled = Some(config.general.input_log);
             self.open_input_log(config.general.input_log);
@@ -92,13 +98,52 @@ impl Host {
         );
     }
 
-    /// 学习语言变了就换释义表；文件缺失或坏了保持原样，只记日志。
-    pub(super) fn apply_learning_language(&mut self, code: &str) {
+    /// 配置里的自定义短语，`[general] system_text_replacements` 开着时再并上系统的文本替换，一起推给 Engine。
+    fn apply_custom_phrases(&mut self, config: &qingjian_platform::Config) {
+        let phrases = if config.general.system_text_replacements {
+            qingjian_core::custom_phrase::merge_replacements(
+                &config.custom_phrases,
+                self.text_replacements
+                    .iter()
+                    .map(|(code, text)| (code.as_str(), text.as_str())),
+            )
+        } else {
+            config.custom_phrases.clone()
+        };
+        if let Err(error) = self.engine.set_custom_phrases(phrases) {
+            tracing::warn!(%error, "自定义短语配置未应用");
+        }
+    }
+
+    /// 重读系统的文本替换（激活输入法时调，系统设置里改过就能跟上）；列表变了才重新套用短语。
+    pub fn refresh_text_replacements(&mut self) {
+        let latest = text_replacements::read_system();
+        if latest == self.text_replacements {
+            return;
+        }
+        tracing::info!(count = latest.len(), "系统文本替换已读取");
+        self.text_replacements = latest;
+        let config = self.settings.config().clone();
+        if config.general.system_text_replacements {
+            self.apply_custom_phrases(&config);
+        }
+    }
+
+    /// 学习语言变了就换释义表，`off` 换成不翻译；文件缺失或坏了保持原样，只记日志。
+    pub(super) fn apply_learning_language(&mut self, general: &GeneralConfig) {
+        if general.learning_language_off() {
+            if self.learning_language.take().is_some() {
+                self.engine.set_translator(Box::new(NoTranslator));
+                tracing::info!("学习语言已关，不显示译文");
+            }
+            return;
+        }
+        let code = general.learning_language.as_str();
         let Ok(language) = code.parse::<Language>() else {
             tracing::warn!(code, "不认识的学习语言，保持不变");
             return;
         };
-        if language == self.learning_language {
+        if self.learning_language == Some(language) {
             return;
         }
         match load_glossary(language) {
@@ -109,7 +154,7 @@ impl Host {
                     "释义表已切换"
                 );
                 self.engine.set_translator(Box::new(glossary));
-                self.learning_language = language;
+                self.learning_language = Some(language);
             }
             Err(error) => tracing::warn!(%error, "释义表加载失败，学习语言不变"),
         }
