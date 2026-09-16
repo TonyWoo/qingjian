@@ -105,7 +105,8 @@ impl Router {
     fn apply_config(&mut self, config: &Config) {
         self.engine.set_fuzzy(config.fuzzy);
         self.engine.set_shuangpin(config.general.shuangpin());
-        self.engine.set_zhuyin_mode(config.general.zhuyin);
+        self.engine.set_zhuyin_mode(config.general.is_zhuyin());
+        self.reload_code_table(config.general.scheme());
         self.engine.set_mode_keys(config.shortcut.mode);
         self.config = RouterConfig::from(config);
         self.reconcile_status();

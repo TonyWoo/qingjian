@@ -84,6 +84,12 @@ Engine 侧在 `engine/rescoring/`：接了打分器就取 Viterbi 前 `RESCORE_P
 
 ## crates/qingjian-platform
 
+`Scheme`（`config/scheme.rs`）：输入方案全拼 / 双拼四套 / 大千注音 / 五笔，`[general] scheme` 的值。
+2026-09-16 起 `shuangpin` + `zhuyin` 两个旧键并入它（当时是两个字段表达同一个维度）：
+旧键还在 `GeneralConfig` 里以 `Option` 保留，`scheme` 没写时用它们推、写了就不看，文件不自动改写。
+`is_code()` 区分形码，`shuangpin()` 取出双拼方案给引擎装配用。
+
+
 `Config`（TOML 配置文件，`[general]` / `[shortcut]` / `[fuzzy]` / `[dictionaries]` / `[apps]` / `[predict]` 分节，首次运行写模板，
 `set_value` 用 toml_edit 原地改键保留注释；`[model] enabled` 本地整句模型开关，`LocalModelConfig`）；`extra_dictionaries` 列出 / 加载随包领域词库与用户 `dicts/`
 （mac 壳与 Windows Server 共用，同名 `.qj` 优先于 `.tsv`）；`protocol` 模块是 Windows Server ↔ TSF DLL 的 IPC 协议类型
@@ -138,6 +144,9 @@ IMK 输入法，源码按 `app / host / imk / candidates / menubar / preferences
 一个产品两个 package：`server`（Server 进程：IPC 分派 + Engine + 命名管道 + 自绘候选窗与悬浮状态条）与 `tsf`（TSF 文本服务 DLL，lib 名固定 `qingjian_tsf`），
 外加 `settings`（WinUI 3 设置程序）与 `installer`（Inno Setup）。不合成一个 crate，因为 DLL 不能带 Engine 的依赖树，见 `apps/windows/README.md`；
 协议类型在 `qingjian-platform::protocol`，设计见 `docs/design/architecture.md`「Windows：TSF」。
+输入方案由 `[general] scheme` 一处决定，Server 启动与热加载各装配一次；形码的码表用 `dispatch::code::find_code_table` 找
+（用户目录 `wubi/wubi86.tsv` 优先，随包 `data/wubi/wubi86.tsv` 兜底，与本地整句模型同一套找法），**路径在启动时定下、热加载不重新找**。
+选了形码却没有码表文件时只警告并按拼音跑——配置说五笔、引擎还在拼音是静默错位，宁可吵。
 
 ## assets
 

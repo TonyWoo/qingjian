@@ -7,6 +7,7 @@ mod log_level;
 mod model;
 mod modifiers;
 mod preedit_mode;
+mod scheme;
 mod shortcut;
 mod status_bar;
 mod theme_mode;
@@ -32,6 +33,7 @@ pub use log_level::LogLevel;
 pub use model::LocalModelConfig;
 pub use modifiers::Modifiers;
 pub use preedit_mode::PreeditMode;
+pub use scheme::Scheme;
 pub use shortcut::ShortcutConfig;
 pub use status_bar::StatusBarConfig;
 pub use theme_mode::ThemeMode;
@@ -171,9 +173,12 @@ english_candidates = true
 full_width_punctuation = true
 # 英文模式下的同一件事，中英各记一份，状态条切的是当前模式那份；只有 Windows 用
 english_full_width_punctuation = false
-# 双拼方案：留空为全拼；xiaohe 小鹤 / ziranma 自然码 / microsoft 微软 / sogou 搜狗
-# 开着时 v / u / i 都是音节键，表达式与问字模式只能用 ? 开头进；微软、搜狗方案的 ; 键是 ing
-shuangpin = ""
+# 输入方案：pinyin 全拼（缺省）/ xiaohe 小鹤双拼 / ziranma 自然码 / microsoft 微软双拼 / sogou 搜狗双拼 /
+# zhuyin 大千注音 / wubi86 五笔（86 版，形码）。
+# 双拼与注音下 v / u / i 都是按键，表达式与问字模式只能用 ? 开头进；微软、搜狗方案的 ; 键是 ing。
+# 五笔下候选按编码前缀查，整句、模糊音、拼写纠错、中英混输与 v / u / i 前缀键都不生效；
+# 候选旁的译文、生词记录与学习照常。
+scheme = "pinyin"
 # 日志级别：info 缺省 / debug 详细（会记录敲的拼音与上屏的文字，配合作者排查问题时再开）。日志在 ~/Library/Logs/Qingjian/
 log_level = "info"
 # 输入日志：每次上屏记一行到数据目录的 input-log.jsonl（敲的键、看到的候选、选了什么），只写在这台电脑上，不上传；

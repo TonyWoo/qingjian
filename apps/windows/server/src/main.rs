@@ -186,7 +186,7 @@ fn main() {
     };
     engine.set_fuzzy(config.fuzzy);
     engine.set_shuangpin(config.general.shuangpin());
-    engine.set_zhuyin_mode(config.general.zhuyin);
+    engine.set_zhuyin_mode(config.general.is_zhuyin());
     engine.set_mode_keys(config.shortcut.mode);
     engine.log_session(env!("CARGO_PKG_VERSION"), "windows");
     dispatch::attach_cloud(&mut engine, &config.predict);
@@ -194,6 +194,7 @@ fn main() {
     let mut router = Router::new(engine, router_config.clone());
     let model_path = dispatch::find_model(user_dir().as_deref(), &root);
     router.configure_local_model(model_path.clone(), &config.model);
+    router.configure_code_table(dispatch::find_code_table(user_dir().as_deref(), &root));
     if let Some(path) = config_path() {
         router.watch_config(&config, path, bundled_dicts_dir, user_dir());
     }

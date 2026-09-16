@@ -20,7 +20,7 @@ use qingjian_core::{EmojiTable, Engine, FuzzyRules, Language};
 use qingjian_dictionary::{CodeTable, Dictionary, WordList};
 use qingjian_learning::FrequencyLearner;
 use qingjian_lm::BigramModel;
-use qingjian_platform::Config;
+use qingjian_platform::{Config, Scheme};
 use qingjian_predict::CloudPredictor;
 use qingjian_translate::Glossary;
 
@@ -233,21 +233,21 @@ fn build_engine(args: &Args) -> Result<Engine, CliError> {
     }
     engine.set_fuzzy(config.fuzzy);
     engine.set_mode_keys(config.shortcut.mode);
+    // `--shuangpin` 现在写的是 [general] scheme（同一个维度的旧键已经并进去），off 就是全拼
     if let Some(scheme) = &args.shuangpin {
-        config.general.shuangpin = if scheme == "off" {
-            String::new()
+        config.general.scheme = if scheme == "off" {
+            Scheme::Pinyin.key().to_owned()
         } else {
             scheme.clone()
         };
     }
-    if let Some(scheme) = config.general.shuangpin() {
-        tracing::info!(%scheme, "双拼已启用");
-    }
-    if config.general.zhuyin {
-        tracing::info!("大千注音已启用");
+    let scheme = config.general.scheme();
+    if scheme != Scheme::Pinyin {
+        tracing::info!(%scheme, "输入方案已启用");
     }
     engine.set_shuangpin(config.general.shuangpin());
-    engine.set_zhuyin_mode(config.general.zhuyin);
+    engine.set_zhuyin_mode(config.general.is_zhuyin());
+    // 形码的码表由 `--wubi` 显式给（方案本身只说「用哪套」，码表文件在哪由壳决定）
     if let Some(path) = &args.wubi {
         engine.set_code_table(Some(CodeTable::from_path(path)?));
         tracing::info!(table = %path.display(), "形码码表已载入");

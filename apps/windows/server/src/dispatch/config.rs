@@ -1,6 +1,5 @@
-use qingjian_core::ShuangpinScheme;
 use qingjian_platform::protocol::KeyModifiers;
-use qingjian_platform::{AppsConfig, Config, KeyCombo, LayoutMode, ThemeMode};
+use qingjian_platform::{AppsConfig, Config, KeyCombo, LayoutMode, Scheme, ThemeMode};
 
 /// Router 要用的配置项，与 macOS 壳的 `Host` 字段对齐。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,8 +49,8 @@ pub struct RouterConfig {
     /// 状态条记住的位置（`[status_bar] x` / `y`，内容左上角物理像素）。
     pub status_pos: Option<(i32, i32)>,
 
-    /// 双拼方案（`[general] shuangpin`）；全拼为 `None`。
-    pub shuangpin: Option<ShuangpinScheme>,
+    /// 输入方案（`[general] scheme`）：状态条显示用，装配引擎要看的是 `engine.scheme()`。
+    pub scheme: Scheme,
 }
 
 impl RouterConfig {
@@ -72,7 +71,7 @@ impl From<&Config> for RouterConfig {
             english_candidates: config.general.english_candidates,
             full_width: config.general.full_width_punctuation,
             english_full_width: config.general.english_full_width_punctuation,
-            zhuyin: config.general.zhuyin,
+            zhuyin: config.general.is_zhuyin(),
             apps: config.apps.clone(),
             translation_keys: {
                 let (first, second) = config.shortcut.translation_keys();
@@ -82,7 +81,7 @@ impl From<&Config> for RouterConfig {
             translate_selection: config.shortcut.translate_selection,
             status_enabled: config.status_bar.enabled,
             status_pos: config.status_bar.x.zip(config.status_bar.y),
-            shuangpin: config.general.shuangpin(),
+            scheme: config.general.scheme(),
         }
     }
 }
