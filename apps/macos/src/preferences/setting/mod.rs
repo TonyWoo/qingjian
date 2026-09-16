@@ -113,8 +113,8 @@ pub enum Setting {
     /// 第 N 本附加词库的「移除」按钮。
     DictionaryRemove(usize),
 
-    /// `[general] shuangpin`，弹出菜单：关 + 四套方案。
-    Shuangpin,
+    /// `[general] scheme`，弹出菜单：全拼 + 四套双拼 + 大千注音 + 五笔。
+    Scheme,
 
     /// `[general] log_level`，勾选框：勾上是 debug。
     VerboseLog,
@@ -220,7 +220,7 @@ impl Setting {
             17 => Self::TranslateSelectionKeys,
             18 => Self::ResetShortcuts,
             19 => Self::ImportDictionary,
-            20 => Self::Shuangpin,
+            20 => Self::Scheme,
             21 => Self::VerboseLog,
             22 => Self::OpenLogDirectory,
             23 => Self::CopyDiagnostics,
@@ -284,7 +284,7 @@ mod tests {
             Setting::TranslateSelectionKeys,
             Setting::ResetShortcuts,
             Setting::ImportDictionary,
-            Setting::Shuangpin,
+            Setting::Scheme,
             Setting::VerboseLog,
             Setting::OpenLogDirectory,
             Setting::CopyDiagnostics,

@@ -1,10 +1,10 @@
-//! 「通用」页：学习语言、每页候选数、双拼方案、英文模式候选。
+//! 「通用」页：学习语言、每页候选数、输入方案、英文模式候选。
 
 use objc2::MainThreadMarker;
 use objc2::rc::Retained;
 use objc2_app_kit::{NSButton, NSPopUpButton};
-use qingjian_core::{Language, ShuangpinScheme};
-use qingjian_platform::{Config, MAX_PAGE_SIZE};
+use qingjian_core::Language;
+use qingjian_platform::{Config, MAX_PAGE_SIZE, Scheme};
 
 use crate::preferences::controls::{
     checkbox, language_label, note, row_checkbox, row_popup, select, set_checked,
@@ -20,8 +20,8 @@ pub struct GeneralPage {
     /// 每页候选数。
     page_size: Retained<NSPopUpButton>,
 
-    /// 双拼方案（第 0 项是关）。
-    shuangpin: Retained<NSPopUpButton>,
+    /// 输入方案（按 `Scheme::ALL` 的顺序）。
+    scheme: Retained<NSPopUpButton>,
 
     /// 英文模式也给候选。
     english: Retained<NSButton>,
@@ -70,21 +70,19 @@ impl GeneralPage {
             Setting::PageSize,
             target,
         );
-        let shuangpin_titles: Vec<String> = std::iter::once("关（全拼）".to_owned())
-            .chain(ShuangpinScheme::ALL.iter().map(|s| s.label().to_owned()))
-            .collect();
-        let shuangpin = row_popup(
+        let scheme_titles: Vec<String> = Scheme::ALL.iter().map(|s| s.label().to_owned()).collect();
+        let scheme = row_popup(
             layout,
             mtm,
-            "双拼",
-            &shuangpin_titles,
-            Setting::Shuangpin,
+            "输入方案",
+            &scheme_titles,
+            Setting::Scheme,
             target,
         );
         note(
             layout,
             mtm,
-            "开双拼后 v、u、i 是音节键，表达式与问字模式只能用 ? 开头进；微软、搜狗方案的 ; 键是 ing。",
+            "双拼与注音下 v、u、i 是音节键，表达式与问字模式只能用 ? 开头进；五笔下候选按编码前缀查，整句、模糊音、拼写纠错与中英混输都不生效。",
         );
         let punctuation = row_popup(
             layout,
@@ -126,7 +124,7 @@ impl GeneralPage {
         Self {
             learning_language,
             page_size,
-            shuangpin,
+            scheme,
             english,
             english_off_in_apps,
             languages: languages.to_vec(),
@@ -148,13 +146,13 @@ impl GeneralPage {
         );
         select(&self.page_size, Some(general.page_size() - 1));
         select(
-            &self.shuangpin,
-            Some(general.shuangpin().map_or(0, |scheme| {
-                ShuangpinScheme::ALL
+            &self.scheme,
+            Some(
+                Scheme::ALL
                     .iter()
-                    .position(|s| *s == scheme)
-                    .map_or(0, |i| i + 1)
-            })),
+                    .position(|s| *s == general.scheme())
+                    .unwrap_or(0),
+            ),
         );
         set_checked(&self.english, general.english_candidates);
         set_checked(

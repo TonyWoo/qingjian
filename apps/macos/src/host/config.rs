@@ -19,6 +19,8 @@ impl Host {
         }
         self.engine.set_mode_keys(config.shortcut.mode);
         self.engine.set_shuangpin(config.general.shuangpin());
+        self.engine.set_zhuyin_mode(config.general.is_zhuyin());
+        self.apply_scheme(config.general.scheme());
         logging::set_level(config.general.log_level);
         self.translation_keys = config.shortcut.translation_keys();
         self.delete_keys = config.shortcut.delete_keys();
@@ -134,6 +136,30 @@ impl Host {
         if self.last_flush.elapsed() >= LEARNING_FLUSH_INTERVAL {
             self.engine.flush_learning();
             self.last_flush = std::time::Instant::now();
+        }
+    }
+
+    /// 按输入方案装配：拼音那几套上面已经设好，形码要额外挂码表（不是形码就卸掉）。
+    /// 选了形码却找不到码表时只警告并保持拼音——配置说五笔、引擎还在拼音是静默错位，宁可吵。
+    fn apply_scheme(&mut self, scheme: Scheme) {
+        if !scheme.is_code() {
+            self.engine.set_code_table(None);
+            return;
+        }
+        let Some(path) = paths::code_table_path() else {
+            tracing::warn!("选了形码方案但找不到码表，仍按拼音输入；随包数据里应当带一份");
+            self.engine.set_code_table(None);
+            return;
+        };
+        match qingjian_dictionary::CodeTable::from_path(&path) {
+            Ok(table) => {
+                tracing::info!(table = %path.display(), entries = table.len(), "形码码表已载入");
+                self.engine.set_code_table(Some(table));
+            }
+            Err(error) => {
+                tracing::error!(%error, table = %path.display(), "形码码表读不了，仍按拼音输入");
+                self.engine.set_code_table(None);
+            }
         }
     }
 }

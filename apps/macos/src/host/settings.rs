@@ -329,13 +329,11 @@ impl Host {
                 self.settings
                     .set_value("apps", "english_candidates_off", apps);
             }
-            // 弹出菜单第 0 项是「全拼」，之后按 ShuangpinScheme::ALL 的顺序。
-            // 写的是 [general] scheme（旧键 shuangpin 已并入它）：写旧键的话，配置里 scheme 的缺省值
-            // 非空、解析时优先，用户选的方案会被静默忽略。macOS 的面板暂时只有全拼与四套双拼。
-            (Setting::Shuangpin, SettingValue::Index(index)) => {
+            // 弹出菜单按 Scheme::ALL 的顺序。写的是 [general] scheme（旧键 shuangpin 已并入它）：
+            // 写旧键的话，配置里 scheme 的缺省值非空、解析时优先，用户选的方案会被静默忽略。
+            (Setting::Scheme, SettingValue::Index(index)) => {
                 let key = index
-                    .checked_sub(1)
-                    .and_then(|i| ShuangpinScheme::ALL.get(i))
+                    .and_then(|i| Scheme::ALL.get(i))
                     .map_or(Scheme::Pinyin.key(), |scheme| scheme.key());
                 self.settings.set_value("general", "scheme", key);
             }
