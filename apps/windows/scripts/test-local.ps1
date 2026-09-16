@@ -41,6 +41,10 @@ $dll = Join-Path $repo 'target\debug\qingjian_tsf.dll'
 $config = Join-Path $env:APPDATA 'Qingjian\config.toml'
 $logs = Join-Path $env:APPDATA 'Qingjian\logs'
 
+# 文本服务的 CLSID，与 `apps/windows/tsf/src/com/mod.rs` 的 `CLSID_QINGJIAN` 同步。
+# 注册完查这里指向哪儿——比 regsvr32 的退出码可靠（见下）。
+$TsfClsid = '{4FDCA82D-E923-49BF-9E75-BB906B93B8BB}'
+
 function Assert-Path($path, $what) {
     if (-not (Test-Path -LiteralPath $path)) {
         throw "$what 不在：$path"
@@ -125,8 +129,19 @@ if (-not $SkipRegister) {
     Write-Host '== 注册 TSF DLL' -ForegroundColor Cyan
     if ($elevated) {
         & regsvr32.exe /s $workDll
-        if ($LASTEXITCODE -ne 0) { throw "regsvr32 失败（exit $LASTEXITCODE）：$workDll" }
-        Write-Host '   已注册新 DLL'
+        $exit = $LASTEXITCODE
+        # **别信 regsvr32 的退出码**：实测注册成功（InprocServer32 已改对、CTF 那边 Enable=1）仍然返回 3。
+        # 查我们真正在意的结果——注册表指向哪儿。
+        $registered = (
+            Get-ItemProperty -LiteralPath "Registry::HKEY_CLASSES_ROOT\CLSID\$TsfClsid\InprocServer32" `
+                -ErrorAction SilentlyContinue
+        ).'(default)'
+        if ($registered -ieq $workDll) {
+            Write-Host "   已注册新 DLL（regsvr32 退出码 $exit，不代表失败）"
+        }
+        else {
+            throw "注册没生效：InprocServer32 现在是 «$registered»，期望 «$workDll»（regsvr32 退出码 $exit）"
+        }
     }
     else {
         Write-Host '   不是管理员，请另开一个管理员 PowerShell 跑：' -ForegroundColor Yellow
