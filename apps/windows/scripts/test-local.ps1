@@ -1,0 +1,150 @@
+# 本地联调：拿刚编出来的 Server 与 TSF DLL，配一份装着真实数据的安装目录跑起来。
+#
+# 为什么不直接在仓库里跑：`bundled_root()` 按 exe 位置找数据，`target\debug\` 下会落到仓库根，
+# 而 `data\generated\`（词库 / LM / 释义表）是 gitignore 的、本机多半没有，于是退回 `assets\sample\`
+# 样例。形码候选照样出得来（码表是独立的），但**译文几乎全空**，会让人误以为释义那条设计没生效。
+# 拷一份安装目录出来跑，`bundled_root()` 就落在它上，数据是真的。
+#
+# 为什么要换 DLL：`qingjian_core::Candidate` 是线上格式的一部分（见 `protocol/mod.rs`），
+# Core 那边加一个 `CandidateKind` 变体，老 DLL 就解不出整条帧、把按键原样放行——表现是
+# 「输入法突然只出英文」。所以两边必须同一份源码编出来的。
+#
+# 用法：
+#   pwsh -File apps\windows\scripts\test-local.ps1
+#   pwsh -File apps\windows\scripts\test-local.ps1 -SkipBuild -SkipRegister
+#
+# 管理员不是必须的：注册 DLL 那一步脚本会自己判断，不是管理员就把命令打出来让你自己跑。
+
+[CmdletBinding()]
+param(
+    # 已安装的目录（真实数据从这里拷）。
+    [string]$InstallDir = "$env:ProgramFiles\Qingjian",
+
+    # 联调用的工作目录。**不要用 %TEMP%**：它在这台机器上是 8.3 短名（`C:\Users\TONYWU~1\...`），
+    # PowerShell 走不通，`cd` 会报「An object at the specified path ... does not exist」。
+    [string]$WorkDir = "$env:USERPROFILE\qingjian-devtest",
+
+    # 跳过编译（已经编好了）。
+    [switch]$SkipBuild,
+
+    # 跳过注册 DLL（只想换 Server）。
+    [switch]$SkipRegister
+)
+
+$ErrorActionPreference = 'Stop'
+
+# apps\windows\scripts -> apps\windows -> apps -> 仓库根
+$repo = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+$table = Join-Path $repo 'assets\wubi\wubi86.tsv'
+$server = Join-Path $repo 'target\debug\qingjian-server.exe'
+$dll = Join-Path $repo 'target\debug\qingjian_tsf.dll'
+$config = Join-Path $env:APPDATA 'Qingjian\config.toml'
+$logs = Join-Path $env:APPDATA 'Qingjian\logs'
+
+function Assert-Path($path, $what) {
+    if (-not (Test-Path -LiteralPath $path)) {
+        throw "$what 不在：$path"
+    }
+}
+
+Write-Host '== 前置检查' -ForegroundColor Cyan
+Assert-Path $InstallDir '安装目录（先装一次青简，或者用 -InstallDir 指过去）'
+Assert-Path $table '五笔码表（跑 dict-convert wubi 生成，见 assets/wubi/README.md）'
+if (-not $SkipBuild) {
+    Write-Host '   安装目录 ✓  码表 ✓'
+}
+else {
+    Assert-Path $server 'Server 产物（去掉 -SkipBuild 先编一次）'
+    Assert-Path $dll 'TSF DLL 产物（去掉 -SkipBuild 先编一次）'
+}
+
+if (-not $SkipBuild) {
+    Write-Host '== 编译 Server 与 TSF DLL' -ForegroundColor Cyan
+    # uiAccess manifest 缺省是开的，没签名的 exe 带它会直接起不来（Permission denied）；
+    # 与 ci.yml 的 windows job 同一个开关
+    $env:QINGJIAN_UIACCESS = '0'
+    Push-Location $repo
+    try {
+        cargo build -p qingjian-windows-server -p qingjian-windows-tsf
+        if ($LASTEXITCODE -ne 0) { throw 'cargo build 失败' }
+    }
+    finally {
+        Pop-Location
+    }
+    Assert-Path $server 'Server 产物'
+    Assert-Path $dll 'TSF DLL 产物'
+}
+
+Write-Host '== 停掉在跑的 Server' -ForegroundColor Cyan
+# 管道名只有一个，旧的占着不放，新起来的连不上——那是静默的二选一，会让人以为新代码没生效
+$running = Get-Process -Name qingjian-server -ErrorAction SilentlyContinue
+if ($running) {
+    $running | Stop-Process -Force
+    Write-Host "   停掉 $($running.Count) 个"
+}
+else {
+    Write-Host '   没有在跑的'
+}
+
+Write-Host "== 拷一份安装目录到 $WorkDir" -ForegroundColor Cyan
+# 不动 Program Files：不需要管理员，也不会把「装好的那份」搞成半新半旧
+robocopy $InstallDir $WorkDir /MIR /NFL /NDL /NJH /NJS | Out-Null
+if ($LASTEXITCODE -ge 8) { throw "robocopy 失败（exit $LASTEXITCODE）" }
+
+Copy-Item -LiteralPath $server -Destination $WorkDir -Force
+New-Item -ItemType Directory -Force -Path (Join-Path $WorkDir 'assets\wubi') | Out-Null
+Copy-Item -LiteralPath $table -Destination (Join-Path $WorkDir 'assets\wubi') -Force
+Write-Host '   新 Server 与五笔码表已就位'
+
+$elevated = [Security.Principal.WindowsPrincipal]::new(
+    [Security.Principal.WindowsIdentity]::GetCurrent()
+).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+if (-not $SkipRegister) {
+    Write-Host '== 注册 TSF DLL' -ForegroundColor Cyan
+    if ($elevated) {
+        & regsvr32.exe /s $dll
+        if ($LASTEXITCODE -ne 0) { throw "regsvr32 失败（exit $LASTEXITCODE）：$dll" }
+        Write-Host '   已注册新 DLL'
+    }
+    else {
+        Write-Host '   不是管理员，请另开一个管理员 PowerShell 跑：' -ForegroundColor Yellow
+        Write-Host "     regsvr32 `"$dll`"" -ForegroundColor Yellow
+    }
+}
+
+Write-Host '== 起 Server' -ForegroundColor Cyan
+Start-Process -FilePath (Join-Path $WorkDir 'qingjian-server.exe') -WorkingDirectory $WorkDir
+Start-Sleep -Seconds 3
+
+Write-Host ''
+Write-Host '接下来手动做这四步：' -ForegroundColor Cyan
+Write-Host ''
+Write-Host '  1. 看日志确认两边都对了（应该有两行「形码码表已载入」与「协议」相关的警告不该出现）：'
+Write-Host "       Get-Content `"$logs\qingjian-server.*.log`" -Tail 20"
+Write-Host '     entries=89256 是码表；词库那行应该是一万以上，不是 148（148 说明落到样例数据了）。'
+Write-Host ''
+Write-Host '  2. 设成五笔，改这一行（保存即热加载，不用重启）：'
+Write-Host "       $config"
+Write-Host '       [general] 段里   scheme = "wubi86"'
+Write-Host ''
+Write-Host '  3. 关掉记事本再打开（已经在跑的进程手里攥着旧 DLL，注册新的对它没用），切到青简。'
+Write-Host ''
+Write-Host '  4. 敲这几组：'
+Write-Host '       r      → 的（一级简码）'
+Write-Host '       v      → 发（重点：不该冒出「v1+2 → 3」那种算式候选）'
+Write-Host '       ga     → 开 排在 开发 前面'
+Write-Host '       khlg   → 中国'
+Write-Host '       ggll   → 一'
+Write-Host '     再看候选右侧有没有译文小字、悬浮状态条第一格是不是「中 · 五笔（86）」。'
+Write-Host ''
+$installedDll = Get-ChildItem -LiteralPath $InstallDir -Filter 'qingjian_tsf-*.dll' -ErrorAction SilentlyContinue |
+    Select-Object -First 1 -ExpandProperty FullName
+Write-Host '回滚：注销新 DLL，再注册装好的那个'
+Write-Host "      regsvr32 /u `"$dll`""
+if ($installedDll) {
+    Write-Host "      regsvr32 `"$installedDll`""
+}
+else {
+    Write-Host "      （$InstallDir 下没找到 qingjian_tsf-*.dll，回滚时用安装包重装一遍）"
+}
