@@ -14,8 +14,10 @@ use super::Router;
 /// 用户目录下的码表（用户自己换的那份）。
 const USER_TABLE: &str = "wubi/wubi86.tsv";
 
-/// 随包数据里的码表。
-const BUNDLED_TABLE: &str = "data/wubi/wubi86.tsv";
+/// 随包数据里的码表。走 `assets/` 而不是 `data/`：这张表随 git 跟踪（`data/` 是给生成物的，
+/// 装机时从数据包解出来），与 emoji / levels 一样在仓库与安装目录里是同一个相对路径，
+/// 所以 `cargo run` 的开发布局也找得到。
+const BUNDLED_TABLE: &str = "assets/wubi/wubi86.tsv";
 
 /// 找码表：用户目录优先，否则随包数据；都没有为 `None`。
 pub fn find_code_table(user_dir: Option<&Path>, bundled_root: &Path) -> Option<PathBuf> {
