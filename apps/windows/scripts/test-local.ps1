@@ -67,10 +67,13 @@ if (-not $SkipBuild) {
             Select-String -SimpleMatch 'qingjian_tsf.dll'
     )
     if ($holders.Count -gt 0) {
-        Write-Host '== 有进程正加载着 TSF DLL，编译写不进去，先关掉它们：' -ForegroundColor Yellow
+        Write-Host '== 有进程正加载着 TSF DLL，编译写不进去' -ForegroundColor Yellow
         $holders | ForEach-Object { Write-Host "   $($_.Line.Trim())" -ForegroundColor Yellow }
-        Write-Host '   （查：tasklist /m qingjian_tsf.dll；关掉之后重跑本脚本）' -ForegroundColor Yellow
-        throw '有进程占用 qingjian_tsf.dll'
+        Write-Host ''
+        Write-Host '   切走输入法就能放开（TSF 在切走时卸载 DLL）：Win+Space 换到别的输入法，或 Shift 切英文。' -ForegroundColor Yellow
+        Write-Host '   还不行就关掉那个窗口重开，在新窗口里别切到青简，直接跑本脚本。' -ForegroundColor Yellow
+        Write-Host '   （查：tasklist /m qingjian_tsf.dll）' -ForegroundColor Yellow
+        exit 1
     }
 
     Write-Host '== 编译 Server 与 TSF DLL' -ForegroundColor Cyan
