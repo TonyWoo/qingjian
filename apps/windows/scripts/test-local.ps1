@@ -130,17 +130,21 @@ if (-not $SkipRegister) {
     if ($elevated) {
         & regsvr32.exe /s $workDll
         $exit = $LASTEXITCODE
-        # **别信 regsvr32 的退出码**：实测注册成功（InprocServer32 已改对、CTF 那边 Enable=1）仍然返回 3。
-        # 查我们真正在意的结果——注册表指向哪儿。
+        # regsvr32 的退出码不可信（实测注册成功仍返回 3），所以读注册表看结果。
+        # 读 HKLM 那一份：提权时 regsvr32 写的就是它。别读 HKCR——那是 HKLM + HKCU 的合并视图，
+        # 实测给过假警报，把一次成功的注册报成失败、白停一轮。
         $registered = (
-            Get-ItemProperty -LiteralPath "Registry::HKEY_CLASSES_ROOT\CLSID\$TsfClsid\InprocServer32" `
+            Get-ItemProperty `
+                -LiteralPath "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Classes\CLSID\$TsfClsid\InprocServer32" `
                 -ErrorAction SilentlyContinue
         ).'(default)'
         if ($registered -ieq $workDll) {
             Write-Host "   已注册新 DLL（regsvr32 退出码 $exit，不代表失败）"
         }
         else {
-            throw "注册没生效：InprocServer32 现在是 «$registered»，期望 «$workDll»（regsvr32 退出码 $exit）"
+            # 只警告不中断：这个判据本身出过假警报，中断的代价是白跑一整轮
+            Write-Host "   ！注册可能没生效：InprocServer32 = «$registered»，期望 «$workDll»（regsvr32 退出码 $exit）" -ForegroundColor Yellow
+            Write-Host '     先继续；输入法不出候选时再手工 regsvr32 一次。' -ForegroundColor Yellow
         }
     }
     else {
