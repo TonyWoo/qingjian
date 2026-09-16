@@ -59,6 +59,20 @@ else {
 }
 
 if (-not $SkipBuild) {
+    # 旧的那次注册可能还指着 `target\debug`，TSF 会按需把 DLL 载进各个宿主（记事本、终端、资源管理器…）。
+    # 被载着时编译写不进去，cargo 报的是「failed to remove file ... 拒绝访问」，看着像代码坏了。
+    # 先查出来点名，别让人去猜。
+    $holders = @(
+        tasklist /m qingjian_tsf.dll /NH 2>$null |
+            Select-String -SimpleMatch 'qingjian_tsf.dll'
+    )
+    if ($holders.Count -gt 0) {
+        Write-Host '== 有进程正加载着 TSF DLL，编译写不进去，先关掉它们：' -ForegroundColor Yellow
+        $holders | ForEach-Object { Write-Host "   $($_.Line.Trim())" -ForegroundColor Yellow }
+        Write-Host '   （查：tasklist /m qingjian_tsf.dll；关掉之后重跑本脚本）' -ForegroundColor Yellow
+        throw '有进程占用 qingjian_tsf.dll'
+    }
+
     Write-Host '== 编译 Server 与 TSF DLL' -ForegroundColor Cyan
     # uiAccess manifest 缺省是开的，没签名的 exe 带它会直接起不来（Permission denied）；
     # 与 ci.yml 的 windows job 同一个开关
