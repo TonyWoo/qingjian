@@ -244,12 +244,15 @@ fn build_engine(args: &Args) -> Result<Engine, CliError> {
             scheme.clone()
         };
     }
+    // 两条轴：拼音侧看 `[general] scheme`，形码侧看 `[general] wubi`；`--wubi` 给了码表就算开着形码。
+    // 两边都开就是混输，见 docs/user/input/fuzzy-and-shuangpin.md
     let scheme = config.general.scheme();
-    if scheme != Scheme::Pinyin {
-        tracing::info!(%scheme, "输入方案已启用");
-    }
-    engine.set_shuangpin(config.general.shuangpin());
-    engine.set_zhuyin_mode(config.general.is_zhuyin());
+    let wubi = config.general.wubi() || args.wubi.is_some();
+    tracing::info!(pinyin = scheme.key(), wubi, "输入方案已启用");
+    engine.set_shuangpin(scheme.shuangpin());
+    engine.set_zhuyin_mode(scheme == Scheme::Zhuyin);
+    // 拼音侧关掉且形码开着才是「只用形码」；两边都关着时留拼音兜底
+    engine.set_phonetic(scheme.is_on() || !wubi);
     // 形码的码表由 `--wubi` 显式给（方案本身只说「用哪套」，码表文件在哪由壳决定）
     if let Some(path) = &args.wubi {
         engine.set_code_table(Some(CodeTable::from_path(path)?));
