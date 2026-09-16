@@ -68,6 +68,10 @@ pwsh -File apps\windows\scripts\test-local.ps1 -SkipBuild -SkipRegister
 停掉在跑的 Server、把**已安装目录整份拷到 `~\qingjian-devtest`** 再换上新的 Server 与随包数据、
 起 Server 并打印剩下要手动做的事（注册 DLL、设方案、敲哪几组键）。
 
+> **脚本存成带 BOM 的 UTF-8**（`sign-local.ps1` 也是）。Windows PowerShell 5.1 对没有 BOM 的 `.ps1`
+> 按系统 ANSI 码页解析，中文会变成乱码、引号配对跟着崩，报出来的却是「字符串缺少终止符」这种语法错。
+> 编辑时别把 BOM 去掉。PS7 两种都读得对，所以只用 `pwsh` 验会漏掉这个问题。
+
 **为什么不在仓库里直接跑**：`bundled_root()` 按 exe 位置找数据，`target\debug\` 下会落到仓库根，
 而 `data\generated\` 是 gitignore 的、本机多半没有，于是退回 `assets\sample\` 样例——形码候选照样出得来
 （码表独立），但译文几乎全空，会让人误以为释义那条设计没生效。
