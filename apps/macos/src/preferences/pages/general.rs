@@ -1,10 +1,10 @@
-//! 「通用」页：学习语言、每页候选数、双拼方案、英文模式候选。
+//! 「通用」页：学习语言、每页候选数、输入方案、英文模式候选。
 
 use objc2::MainThreadMarker;
 use objc2::rc::Retained;
 use objc2_app_kit::{NSButton, NSPopUpButton};
-use qingjian_core::{Language, ShuangpinScheme};
-use qingjian_platform::{Config, MAX_PAGE_SIZE};
+use qingjian_core::Language;
+use qingjian_platform::{Config, MAX_PAGE_SIZE, Scheme};
 
 use crate::preferences::controls::{
     checkbox, language_label, note, row_checkbox, row_popup, select, set_checked,
@@ -20,8 +20,14 @@ pub struct GeneralPage {
     /// 每页候选数。
     page_size: Retained<NSPopUpButton>,
 
-    /// 双拼方案（第 0 项是关）。
-    shuangpin: Retained<NSPopUpButton>,
+    /// 拼音方案（按 `Scheme::ALL` 的顺序）。
+    scheme: Retained<NSPopUpButton>,
+
+    /// 五笔（86 版形码）；与拼音方案同时开着就是混输。
+    wubi: Retained<NSButton>,
+
+    /// 繁体输出模式。
+    traditional: Retained<NSButton>,
 
     /// 英文模式也给候选。
     english: Retained<NSButton>,
@@ -75,21 +81,26 @@ impl GeneralPage {
             Setting::PageSize,
             target,
         );
-        let shuangpin_titles: Vec<String> = std::iter::once("关（全拼）".to_owned())
-            .chain(ShuangpinScheme::ALL.iter().map(|s| s.label().to_owned()))
-            .collect();
-        let shuangpin = row_popup(
+        let scheme_titles: Vec<String> = Scheme::ALL.iter().map(|s| s.label().to_owned()).collect();
+        let scheme = row_popup(
             layout,
             mtm,
-            "双拼",
-            &shuangpin_titles,
-            Setting::Shuangpin,
+            "拼音方案",
+            &scheme_titles,
+            Setting::Scheme,
             target,
         );
         note(
             layout,
             mtm,
-            "开双拼后 v、u、i 是音节键，表达式与问字模式只能用 ? 开头进；微软、搜狗方案的 ; 键是 ing。",
+            "全拼、四套双拼、大千注音，或关（只用下面的五笔）。双拼与注音下 v、u、i 是按键，表达式与问字模式只能用 ? 开头进。",
+        );
+        let wubi = checkbox(mtm, "五笔（86 版）", Setting::Wubi, target);
+        row_checkbox(layout, &wubi);
+        note(
+            layout,
+            mtm,
+            "与拼音方案同时开着就是混输：五笔候选在前，打不出的字直接打拼音。单用五笔请把拼音方案关掉；第 5 个字母起五笔查不到东西，自动只剩拼音。",
         );
         let punctuation = row_popup(
             layout,
@@ -104,6 +115,8 @@ impl GeneralPage {
             mtm,
             "仅影响标点，字母和数字保持半角；自定义短语原样输出。设置会保存。 ",
         );
+        let traditional = checkbox(mtm, "繁体输出", Setting::Traditional, target);
+        row_checkbox(layout, &traditional);
         let english = checkbox(
             mtm,
             "英文模式（Caps Lock）也给候选",
@@ -143,7 +156,9 @@ impl GeneralPage {
         Self {
             learning_language,
             page_size,
-            shuangpin,
+            scheme,
+            wubi,
+            traditional,
             english,
             english_off_in_apps,
             chinese_first,
@@ -170,14 +185,16 @@ impl GeneralPage {
         );
         select(&self.page_size, Some(general.page_size() - 1));
         select(
-            &self.shuangpin,
-            Some(general.shuangpin().map_or(0, |scheme| {
-                ShuangpinScheme::ALL
+            &self.scheme,
+            Some(
+                Scheme::ALL
                     .iter()
-                    .position(|s| *s == scheme)
-                    .map_or(0, |i| i + 1)
-            })),
+                    .position(|s| *s == general.scheme())
+                    .unwrap_or(0),
+            ),
         );
+        set_checked(&self.wubi, general.wubi());
+        set_checked(&self.traditional, general.traditional);
         set_checked(&self.english, general.english_candidates);
         set_checked(
             &self.english_off_in_apps,

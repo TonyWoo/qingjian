@@ -38,9 +38,49 @@ impl Engine {
         self.forget_span_cache();
     }
 
+    /// 設置是否啟用繁體輸出模式。
+    pub fn set_traditional_mode(&mut self, on: bool) {
+        self.traditional = on;
+        if on && self.opencc.is_none() {
+            match ferrous_opencc::OpenCC::from_config(ferrous_opencc::config::BuiltinConfig::S2tw) {
+                Ok(opencc) => self.opencc = Some(opencc),
+                Err(error) => tracing::warn!(%error, "繁体转换器初始化失败，候选仍是简体"),
+            }
+        }
+    }
+
     /// 目前是否處於注音模式。
     pub fn is_zhuyin_mode(&self) -> bool {
         self.zhuyin
+    }
+
+    /// 换形码码表（五笔），`None` 回到拼音的诸方案。编码与拼音是两套键，纠错缓存一并清掉。
+    pub fn set_code_table(&mut self, table: Option<CodeTable>) {
+        self.code = table;
+        *self.correction_cache.borrow_mut() = None;
+        self.forget_span_cache();
+    }
+
+    /// 当前的形码码表；`None` 表示走拼音（全拼 / 双拼 / 注音）。
+    pub fn code_table(&self) -> Option<&CodeTable> {
+        self.code.as_ref()
+    }
+
+    /// 是否处在形码方案下。
+    pub fn is_code_mode(&self) -> bool {
+        self.code.is_some()
+    }
+
+    /// 拼音侧参不参与查询。形码开着时把它关掉就是「只用形码」（`[general] scheme = "none"`）；
+    /// 两边都开是混输，见 [`Self::set_code_table`] 与 [`Self::query_mixed`]。
+    pub fn set_phonetic(&mut self, on: bool) {
+        self.phonetic = on;
+        *self.correction_cache.borrow_mut() = None;
+        self.forget_span_cache();
+    }
+
+    pub fn is_phonetic(&self) -> bool {
+        self.phonetic
     }
 
     /// 判斷注音模式下目前是否還需要輸入聲調。
@@ -72,9 +112,9 @@ impl Engine {
             .is_some_and(|scheme| scheme.decode(body).pending_initial())
     }
 
-    /// 有效的模式键：双拼下 v / u / i 都是音节键，字母模式键让位，只剩 `?` 开头的问字。
+    /// 有效的模式键：双拼下 v / u / i 都是音节键，形码下它们是字根键，字母模式键都让位，只剩 `?` 开头的问字。
     pub(super) fn modes(&self) -> ModeKeys {
-        if self.shuangpin.is_some() {
+        if self.shuangpin.is_some() || self.code.is_some() {
             self.modes.letterless()
         } else {
             self.modes
@@ -97,7 +137,11 @@ impl Engine {
     }
 
     /// 光标后剩余拼音的显示形式：双拼先解码；能切就按音节用 `'` 连上，切不动就原样。
+    /// 形码的剩余段是编码，原样显示。
     pub(super) fn marked_rest(&self, rest: &str) -> String {
+        if self.code.is_some() {
+            return rest.to_owned();
+        }
         match self.decode(rest) {
             Some(decoded) => decoded.marked(),
             None => marked_rest(rest),

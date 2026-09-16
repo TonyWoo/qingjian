@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use qingjian_core::sentence::SentenceScorer;
 use qingjian_core::{Language, ModeKeys, ShuangpinScheme};
+use qingjian_platform::Scheme;
 use qingjian_platform::protocol::{
     ClientMessage, Frame, KeyEvent, KeyModifiers, KeyOutcome, PROTOCOL_VERSION, ServerMessage,
     SessionId,
@@ -78,7 +79,7 @@ fn router_in(config: RouterConfig, app: Option<String>) -> Router {
     })
     .expect("assemble engine from sample data");
     // 与 main.rs 一样，双拼方案是启动时直接设给 Engine 的。
-    engine.set_shuangpin(config.shuangpin);
+    engine.set_shuangpin(config.scheme.shuangpin());
     let mut router = Router::new(engine, config);
     assert_eq!(
         router.handle(ClientMessage::OpenSession {
@@ -811,7 +812,7 @@ fn status_bar_follows_mode_when_enabled() {
 fn status_bar_shows_shuangpin_scheme_in_chinese() {
     let config = RouterConfig {
         status_enabled: true,
-        shuangpin: Some(ShuangpinScheme::Xiaohe),
+        scheme: Scheme::Shuangpin(ShuangpinScheme::Xiaohe),
         ..RouterConfig::default()
     };
     let mut router = router_with(config);
@@ -1043,7 +1044,7 @@ fn bare_question_mark_is_half_width_when_full_width_is_off() {
 #[test]
 fn shuangpin_semicolon_stays_in_buffer_in_question_mode() {
     let mut router = router_asking_with(RouterConfig {
-        shuangpin: Some(ShuangpinScheme::Microsoft),
+        scheme: Scheme::Shuangpin(ShuangpinScheme::Microsoft),
         ..RouterConfig::default()
     });
     // 微软双拼的 `;` 是 ing 键：问字模式下末尾有落单声母时进缓冲区，而不是把候选上屏。

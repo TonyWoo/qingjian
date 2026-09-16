@@ -128,8 +128,14 @@ pub enum Setting {
     /// 第 N 本附加词库的「移除」按钮。
     DictionaryRemove(usize),
 
-    /// `[general] shuangpin`，弹出菜单：关 + 四套方案。
-    Shuangpin,
+    /// `[general] scheme`，弹出菜单：全拼 + 四套双拼 + 大千注音 + 关。
+    Scheme,
+
+    /// `[general] wubi`，勾选框：勾上是五笔（86 版）。与拼音同时开着就是混输。
+    Wubi,
+
+    /// [general] traditional，勾选框：繁体输出。
+    Traditional,
 
     /// `[general] log_level`，勾选框：勾上是 debug。
     VerboseLog,
@@ -192,7 +198,8 @@ impl Setting {
             Self::TranslateSelectionKeys => 17,
             Self::ResetShortcuts => 18,
             Self::ImportDictionary => 19,
-            Self::Shuangpin => 20,
+            Self::Scheme => 20,
+            Self::Traditional => 47,
             Self::VerboseLog => 21,
             Self::OpenLogDirectory => 22,
             Self::CopyDiagnostics => 23,
@@ -214,6 +221,7 @@ impl Setting {
             Self::NewPhrase => 38,
             Self::EditPhrase => 39,
             Self::CancelPhraseEdit => 40,
+            Self::Wubi => 41,
             Self::Renderer => 43,
             Self::Font => 44,
             Self::SystemTextReplacements => 46,
@@ -248,7 +256,9 @@ impl Setting {
             17 => Self::TranslateSelectionKeys,
             18 => Self::ResetShortcuts,
             19 => Self::ImportDictionary,
-            20 => Self::Shuangpin,
+            20 => Self::Scheme,
+            41 => Self::Wubi,
+            47 => Self::Traditional,
             21 => Self::VerboseLog,
             22 => Self::OpenLogDirectory,
             23 => Self::CopyDiagnostics,
@@ -316,7 +326,9 @@ mod tests {
             Setting::TranslateSelectionKeys,
             Setting::ResetShortcuts,
             Setting::ImportDictionary,
-            Setting::Shuangpin,
+            Setting::Scheme,
+            Setting::Wubi,
+            Setting::Traditional,
             Setting::VerboseLog,
             Setting::OpenLogDirectory,
             Setting::CopyDiagnostics,

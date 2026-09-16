@@ -29,23 +29,24 @@ impl Engine {
         let start = Instant::now();
         let mut hits = 0;
         for candidate in &mut list.items {
+            let mut text = candidate.text.as_str();
+            let traditional_map = self.traditional_map.borrow();
+            if self.traditional
+                && let Some(simp) = traditional_map.get(text)
+            {
+                text = simp.as_str();
+            }
             candidate.translation = match candidate.kind {
                 CandidateKind::Custom(_) => None,
                 // 英文候选按敲的大小写显示（Company / COMPANY），释义表键是小写
-                CandidateKind::English => self
-                    .english_translator
-                    .translate(&candidate.text)
-                    .or_else(|| {
-                        self.english_translator
-                            .translate(&candidate.text.to_ascii_lowercase())
-                    }),
-                _ => self
-                    .translator
-                    .translate(&candidate.text)
-                    .map(|mut translation| {
-                        self.mark_fresh(&mut translation);
-                        translation
-                    }),
+                CandidateKind::English => self.english_translator.translate(text).or_else(|| {
+                    self.english_translator
+                        .translate(&text.to_ascii_lowercase())
+                }),
+                _ => self.translator.translate(text).map(|mut translation| {
+                    self.mark_fresh(&mut translation);
+                    translation
+                }),
             };
             hits += usize::from(candidate.translation.is_some());
         }
@@ -84,6 +85,14 @@ impl Engine {
         source: InputSource,
         used_sense: Option<usize>,
     ) -> String {
+        let traditional_text = candidate.text.clone();
+        let mut candidate_owned = candidate.clone();
+        if self.traditional
+            && let Some(simp) = self.traditional_map.borrow().get(&candidate_owned.text)
+        {
+            candidate_owned.text = simp.clone();
+        }
+        let candidate = &candidate_owned;
         // 整句不是一个词，不记词频；按路径上的词逐条记转移（喂个人 n-gram），路径要在拼音消耗前重算
         let sentence_words = (candidate.kind == CandidateKind::Sentence)
             .then(|| self.sentence_words(candidate))
@@ -104,6 +113,13 @@ impl Engine {
                 let (consumed, input) = self.consumed_by(candidate);
                 self.learner.record_choice(&input, &candidate.text);
                 typos = self.accepted_typos(candidate);
+                (consumed, input)
+            }
+            // 形码的候选没有音节，对不上拼音；编码是整段一起敲的，上屏吃掉整个作用域
+            CandidateKind::Code => {
+                self.learner.record(candidate);
+                let (consumed, input) = self.whole_scope();
+                self.learner.record_choice(&input, &candidate.text);
                 (consumed, input)
             }
             // 英文词带出的 emoji 没有音节，和英文词一样对应整段作用域
@@ -165,7 +181,7 @@ impl Engine {
         // 词库里有、释义表里没有的词：交给释义兜底在后台问云端，写进个人释义表，下次就有译词；私密输入中不问
         if matches!(
             candidate.kind,
-            CandidateKind::Chinese | CandidateKind::Cloud
+            CandidateKind::Chinese | CandidateKind::Cloud | CandidateKind::Code
         ) && self.gloss_filler.is_enabled()
             && !self.private
             && self.translator.language() != Language::Chinese
@@ -177,7 +193,8 @@ impl Engine {
         self.composition.drain_prefix(consumed);
         let buffer_left = !self.composition.is_empty();
         match candidate.kind {
-            CandidateKind::Chinese | CandidateKind::Cloud => {
+            CandidateKind::Chinese | CandidateKind::Cloud | CandidateKind::Code => {
+                // 形码没有音节，`record_word` 里按音节数做的整段造词自然不会触发
                 self.record_word(
                     &candidate.text,
                     &candidate.syllables,
@@ -229,16 +246,19 @@ impl Engine {
         self.history.record(&candidate.text);
         let learned = matches!(
             candidate.kind,
-            CandidateKind::Chinese | CandidateKind::Cloud | CandidateKind::Sentence
+            CandidateKind::Chinese
+                | CandidateKind::Code
+                | CandidateKind::Cloud
+                | CandidateKind::Sentence
         );
         let commit = if learned {
             LastCommit {
                 text: candidate.text.clone(),
-                chars: candidate.text.chars().count(),
+                chars: traditional_text.chars().count(),
                 input,
                 chosen: matches!(
                     candidate.kind,
-                    CandidateKind::Chinese | CandidateKind::Cloud
+                    CandidateKind::Chinese | CandidateKind::Code | CandidateKind::Cloud
                 )
                 .then(|| candidate.text.clone()),
                 transitions: std::mem::take(&mut self.recording),
@@ -248,10 +268,12 @@ impl Engine {
                 phrase,
             }
         } else {
-            LastCommit::plain(&candidate.text)
+            let mut plain = LastCommit::plain(&candidate.text);
+            plain.chars = traditional_text.chars().count();
+            plain
         };
         self.remember_commit(commit);
-        candidate.text.clone()
+        traditional_text
     }
 
     /// 一段拼音分几次选完了（`jidiaole` 先选 挤、剩下的走整句 掉了）：这几个词合起来就是用户对这段拼音的答案。

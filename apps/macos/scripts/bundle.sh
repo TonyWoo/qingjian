@@ -66,12 +66,15 @@ cp apps/macos/scripts/uninstall.sh "$APP/Contents/Resources/uninstall.sh"
 # 输入源名字按系统语言本地化（中文系统显示「青简」，其他显示 Qingjian）
 cp -R apps/macos/resources/*.lproj "$APP/Contents/Resources/"
 # 词库与释义表打进 Resources。data/generated/ 里有生成好的产品数据（自建词库 + 语言模型 + LLM 释义表）就用它，
-# 否则用 assets/sample/ 的样例。
+# 否则用 assets/sample/ 的样例。没有数据管道的机器跑 tools/release/data-fetch.sh 按 tools/release/data.lock 下载。
 cp assets/sample/*.tsv "$APP/Contents/Resources/"
 # emoji 表（Unicode CLDR，可发布）
 cp assets/emoji/*.tsv "$APP/Contents/Resources/"
 # 词汇等级表（CEFR-J / Octanove / JLPT，见 assets/levels/README.md），「统计」页按级数词汇
 cp assets/levels/levels-*.tsv "$APP/Contents/Resources/"
+# 五笔码表（输入方案选五笔时用，见 assets/wubi/README.md；极点 86 码表，Apache-2.0）
+mkdir -p "$APP/Contents/Resources/wubi"
+cp assets/wubi/wubi86.tsv "$APP/Contents/Resources/wubi/"
 if [[ -f data/generated/dict.tsv || -f data/generated/dict.qj ]]; then
   # 词库与语言模型打成 .qj（mmap 直接用），TSV 比 .qj 新时重新打包；只有 .qj（CI 从数据包解出来的）就直接用
   if [[ -f data/generated/dict.tsv && ( ! -f data/generated/dict.qj || data/generated/dict.tsv -nt data/generated/dict.qj ) ]]; then

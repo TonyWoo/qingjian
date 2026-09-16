@@ -60,7 +60,7 @@
   语料 0 次的（微软拼音 / 悬浮条）按规矩没进，要进得另立白名单
 - [ ] 按输入串记的选择只认字面：`wod` 下选的 我的 惠及不到 `wode`；考虑同时按候选全拼记一份、查询取两者最大
 - [ ] 已经学进用户词的错读音云端词（`我的 wo di`、`我的哦 wo di e` 这类）没有清理入口：偏好设置词库页给「按读音核对用户词」，或一次性脚本
-- [ ] 正式版前的发布可信性（2026-09-12 外部 CI 检查，测试版先不做）：产品数据改不可变 tag 并在仓库锁版本 + SHA（现在滚动 `data` Release，只校验 SHA256SUMS）；
+- [ ] 正式版前的发布可信性（2026-09-12 外部 CI 检查，测试版先不做）：产品数据改不可变 tag 并在仓库锁版本 + SHA（2026-09-16 已做：`data-vN` Release + `tools/release/data.lock` + `data-fetch.sh`）；
   安装包内容验证（pkg / Setup.exe 里词库、模型、许可齐不齐，`codesign --verify` / `signtool verify`）；`cargo deny`（许可证 + 来源）；`.qj` 读取器越界 fuzz、`qingjian-format` 跑 Miri
 - [ ] 本地整句模型（已进壳并随包发出，见 `docs/notes/neural-rescoring.md`；加载 12 秒是早期首次 Metal 编译的记录，2026-09-12 装机实测 102 ms，划掉）：
   重排改了切分时应用里的行内拼音要到下一键才更新；日语
@@ -112,3 +112,9 @@
     data Release 传 `model.qjm`，bundle.sh / qingjian.iss 只带一个文件），待 mac 与 box 真机各装一次验加载与重排；
     密码框已按 TSF 规范做（2026-09-12）：`KEYBOARD_DISABLED` compartment 整键放行不组句，`IS_PRIVATE` / 密码 / PIN 输入范围为私密（组句但不学不记不发云端，`ClientMessage::Privacy` → `Engine::set_private`），box 真机验过：Edge 密码框整键放行；InPrivate 网页文本框报 `IS_SEARCH` 不报 `IS_PRIVATE`，私密路径只靠单测覆盖；CI 两个 job 都从 `data` Release 取 `model.qjm`（已做）。
 - [ ] Linux IBus / Fcitx（Phase 5）；配置同步、跨平台词库
+
+## 四、其他输入方案
+
+- [ ] 五笔（86 版）：方案与分期见 [wubi.md](wubi.md)，第一期 Core + CLI + Windows；
+  `[general] scheme` 收敛与配置迁移一起做（顺带解掉〇里的「配置文件版本迁移」）
+- [ ] 复杂方案收尾（与上一条共用「输入方案」抽象）：注音只在 Core 与 Windows 接了，macOS 侧还没接；双拼的方案切换要等 `[general] scheme`
