@@ -56,7 +56,7 @@ jobs:
           VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' apps/macos/Cargo.toml | head -1)"
           TAG="${GITHUB_REF_NAME#macos-v}"
           if [[ "$VERSION" != "$TAG" ]]; then
-            echo "apps/macos/Cargo.toml 是 $VERSION，标签是 $GITHUB_REF_NAME，先改版本号再打标签" >&2
+            echo "apps/macos/Cargo.toml 是 ${VERSION}，标签是 ${GITHUB_REF_NAME}，先改版本号再打标签" >&2
             exit 1
           fi
           if [[ "$VERSION" == *-dev ]]; then
@@ -190,7 +190,7 @@ jobs:
           VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' apps/windows/server/Cargo.toml | head -1)"
           TAG="${GITHUB_REF_NAME#windows-v}"
           if [[ "$VERSION" != "$TAG" ]]; then
-            echo "apps/windows/server/Cargo.toml 是 $VERSION，标签是 $GITHUB_REF_NAME，先改版本号再打标签" >&2
+            echo "apps/windows/server/Cargo.toml 是 ${VERSION}，标签是 ${GITHUB_REF_NAME}，先改版本号再打标签" >&2
             exit 1
           fi
           if [[ "$VERSION" == *-dev ]]; then
