@@ -128,7 +128,7 @@ pub enum Setting {
     /// 第 N 本附加词库的「移除」按钮。
     DictionaryRemove(usize),
 
-    /// `[general] scheme`，弹出菜单：全拼 + 四套双拼 + 大千注音 + 关。
+    /// `[general] scheme`，弹出菜单：全拼 + 五套双拼 + 大千注音 + 关。
     Scheme,
 
     /// `[general] wubi`，勾选框：勾上是五笔（86 版）。与拼音同时开着就是混输。

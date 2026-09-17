@@ -186,7 +186,7 @@ chinese_first = false
 full_width_punctuation = true
 # 英文模式下的同一件事，中英各记一份，状态条切的是当前模式那份；只有 Windows 用
 english_full_width_punctuation = false
-# 拼音方案：pinyin 全拼（缺省）/ xiaohe 小鹤双拼 / ziranma 自然码 / microsoft 微软双拼 / sogou 搜狗双拼 /
+# 拼音方案：pinyin 全拼（缺省）/ xiaohe 小鹤双拼 / ziranma 自然码 / microsoft 微软双拼 / sogou 搜狗双拼 / xiaolang 小浪双拼 /
 # zhuyin 大千注音 / none 关（只用形码，见下面的 wubi）。
 # 双拼与注音下 v / u / i 都是按键，表达式模式没有入口，问字只能靠 question_mark 打开后用 ? 进；微软、搜狗方案的 ; 键是 ing
 scheme = "pinyin"
@@ -516,10 +516,10 @@ mod tests {
         assert_eq!(config.general.log_level, LogLevel::Info);
         assert_eq!(config.shortcut.mode.expression, 'i');
         assert_eq!(config.shortcut.mode.question, 'u');
-        // 译词键的缺省分平台（Windows 用 Ctrl），这里断言的是「没写就用缺省」
+        // 译词修饰键缺省分平台（Windows 是 Ctrl 系，其余 Option 系，见 shortcut.rs），断言跟着 Default 走
         assert_eq!(
             config.shortcut.translation,
-            ShortcutConfig::default().translation
+            Config::default().shortcut.translation
         );
     }
 

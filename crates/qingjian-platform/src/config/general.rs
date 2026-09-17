@@ -62,7 +62,7 @@ pub struct GeneralConfig {
     /// 英文模式下的同一件事，中英各记一份；缺省半角。只有 Windows 用（macOS 英文模式一律半角）。
     pub english_full_width_punctuation: bool,
 
-    /// 拼音侧方案：`pinyin`（全拼，缺省）/ `xiaohe` / `ziranma` / `microsoft` / `sogou` / `zhuyin`
+    /// 拼音侧方案：`pinyin`（全拼，缺省）/ `xiaohe` / `ziranma` / `microsoft` / `sogou` / `xiaolang` / `zhuyin`
     /// / `none`（关，只用形码），见 [`Scheme`]。用不认识的写法时按全拼并警告。
     pub scheme: String,
 
@@ -252,6 +252,8 @@ mod tests {
         assert_eq!(general.shuangpin(), Some(ShuangpinScheme::Xiaohe));
         general.scheme = " Sogou ".to_owned();
         assert_eq!(general.shuangpin(), Some(ShuangpinScheme::Sogou));
+        general.scheme = "xiaolang".to_owned();
+        assert_eq!(general.shuangpin(), Some(ShuangpinScheme::Xiaolang));
         general.scheme = "none".to_owned();
         assert_eq!(general.scheme(), Scheme::Off);
         assert!(!general.scheme().is_on());
