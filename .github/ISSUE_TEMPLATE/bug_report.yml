@@ -31,7 +31,7 @@ body:
     attributes:
       label: 青简版本
       description: 「设置 → 关于」页里的版本号，或下载的安装包文件名
-      placeholder: windows-v0.1.0-alpha.2
+      placeholder: 0.1.3
     validations:
       required: true
   - type: input
