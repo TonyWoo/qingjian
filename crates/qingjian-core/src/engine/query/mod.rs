@@ -64,13 +64,22 @@ impl Engine {
             for candidate in &mut query.candidates.items {
                 if matches!(
                     candidate.kind,
-                    CandidateKind::Chinese | CandidateKind::Sentence | CandidateKind::Cloud
+                    CandidateKind::Chinese
+                        | CandidateKind::Code
+                        | CandidateKind::Sentence
+                        | CandidateKind::Cloud
                 ) {
                     let traditional_text = opencc.convert(&candidate.text);
                     self.traditional_map
                         .borrow_mut()
                         .insert(traditional_text.clone(), candidate.text.clone());
                     candidate.text = traditional_text;
+                } else if candidate.kind == CandidateKind::Emoji
+                    && let Some(reading) = &candidate.reading
+                {
+                    // emoji 右边标的是它对应的那个词（放在 `reading` 里）：跟着一起转，
+                    // 免得同一页里词库候选是繁体、emoji 的标注还是简体
+                    candidate.reading = Some(opencc.convert(reading));
                 }
             }
         }

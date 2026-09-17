@@ -45,3 +45,21 @@ fn emoji_follow_their_word_and_consume_its_syllables() {
     assert_eq!(engine.commit(&emoji), "👨‍💻");
     assert_eq!(engine.composition().text(), "zhe");
 }
+
+#[test]
+fn traditional_mode_converts_the_word_beside_an_emoji() {
+    // emoji 右边标的是它对应的那个词（放在 `reading` 里）：繁体输出下要跟着一起转，
+    // 否则同一页里词库候选是繁体、emoji 的标注还是简体。
+    let table = EmojiTable::parse("开发\t👨‍💻 🛠️\n").unwrap();
+    let mut engine = engine().with_emoji(table);
+    engine.set_traditional_mode(true);
+    engine.set_input("kaifa");
+    let items = engine.query().unwrap().candidates.items;
+    assert!(items.iter().any(|c| c.text == "開發"));
+    let emoji = items
+        .iter()
+        .find(|c| c.kind == CandidateKind::Emoji)
+        .expect("繁体模式下也该出 emoji 候选");
+    assert_eq!(emoji.text, "👨‍💻");
+    assert_eq!(emoji.reading.as_deref(), Some("開發"));
+}

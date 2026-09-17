@@ -184,6 +184,25 @@ fn keys_outside_the_code_alphabet_fall_back_to_raw() {
 }
 
 #[test]
+fn traditional_mode_converts_code_candidates_too() {
+    // 繁体输出原来只覆盖词库 / 整句 / 云端三类候选，形码这一路是后加的、漏在白名单外，
+    // 表现为开着繁体输出、五笔候选仍是简体（同一页里拼音候选已经是繁体）。
+    let mut engine = wubi().with_learner(Box::new(WordLearner::default()));
+    engine.set_traditional_mode(true);
+    assert_eq!(code_texts(&mut engine, "ga"), ["開", "開發"]);
+    engine.set_input("v");
+    assert_eq!(code_texts(&mut engine, "v")[0], "發");
+
+    // 上屏给应用的是繁体，学习仍按简体记（与词库候选一路）
+    engine.set_input("ga");
+    let kai = engine.query().unwrap().candidates.items[0].clone();
+    assert_eq!(kai.text, "開");
+    assert_eq!(engine.commit(&kai), "開");
+    assert!(engine.learner().choice_weight("ga", "开") > 0);
+    assert_eq!(engine.learner().choice_weight("ga", "開"), 0);
+}
+
+#[test]
 fn letters_never_start_a_mode_under_wubi() {
     // 形码下每个字母都是字根键，连大写也让位（双拼那套 Shift+V / Shift+U 在这里不适用）：
     // 字母一律进缓冲区，表达式与问字模式只剩 `?` 这一个人口。
