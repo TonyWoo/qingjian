@@ -184,6 +184,24 @@ fn keys_outside_the_code_alphabet_fall_back_to_raw() {
 }
 
 #[test]
+fn letters_never_start_a_mode_under_wubi() {
+    // 形码下每个字母都是字根键，连大写也让位（双拼那套 Shift+V / Shift+U 在这里不适用）：
+    // 字母一律进缓冲区，表达式与问字模式只剩 `?` 这一个人口。
+    let mut engine = wubi();
+    assert!(!engine.takes_mode_letter('V') && !engine.takes_mode_letter('U'));
+    engine.set_input("V1+2");
+    assert!(!engine.expression_mode());
+    engine.set_input("Usangemu");
+    assert!(!engine.question_mode());
+    engine.set_mode_keys(ModeKeys {
+        question_mark: true,
+        ..ModeKeys::default()
+    });
+    engine.set_input("?nihao");
+    assert!(engine.question_mode());
+}
+
+#[test]
 fn switching_back_to_pinyin_drops_the_code_table() {
     let mut engine = wubi();
     engine.set_code_table(None);

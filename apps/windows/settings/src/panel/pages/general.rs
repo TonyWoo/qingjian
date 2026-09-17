@@ -62,7 +62,8 @@ pub(crate) fn view(settings: &Settings, context: &mut ViewContext<Settings>) -> 
         field(
             "拼音方案",
             "全拼、四套双拼、大千注音，或关（只用下面的五笔）。\
-             双拼与注音下 v、u、i 是按键，表达式与问字模式只能用 ? 开头进。",
+             双拼下 v、u、i 是音节键，表达式与问字模式改用 Shift+V、Shift+U 进（微软、搜狗方案的 ; 键是 ing）；\
+             注音下 v、u、i 也是按键，只能用 ? 开头进。",
             string_combo(
                 &SCHEMES,
                 g.scheme().key(),
