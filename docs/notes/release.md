@@ -70,6 +70,17 @@ cargo 命令全 `--locked`（含 `bundle.sh` 与 `build.ps1`）。普通 CI 只�
 | `.github/workflows/ci.yml` | push main、PR | Linux 上 `cargo fmt --check` / clippy / test，排除 `qingjian-macos`（IMK 外壳只能在 macOS 编译，macOS runner 计费是 Linux 的 10 倍） |
 | `.github/workflows/release.yml` | 推 `macos-v*` / `windows-v*` 标签 | `macos` job（`macos-26`）：下载产品数据 → 可选签名公证 → `bundle.sh --pkg` 打 arm64 与交叉编译的 x86_64 → 建 Release；`windows` job（`windows-latest`）：下载产品数据 → `build.ps1` 打 Inno Setup 安装包 → 建 Release。两者最后都跑 `publish-releases-json.sh` |
 
+## 语音模型从哪来
+
+**语音模型不进安装包**（几百 MB，多数用户不用语音），改成用户第一次用时在设置里下载。它与上面的产品数据走**同一套发布方式**、
+但**不同的标签**：`voice-v1` 这种（`tools/release/pack-voice.sh` 发），与 `data-vN` 分开 —— 词库与语言模型更新时不该让语音模型的地址跟着变。
+`tools/release/voice.lock` 钉住每个档位的文件名、URL、SHA-256 与体积；它是**编进二进制**的（`include_str!`），所以设置界面不用去磁盘上找清单，
+也不会出现「清单与二进制对不上」。
+
+**不打成一个压缩包**：每个模型文件一个独立资产，运行时逐个下载、逐个校验 SHA-256（`crates/qingjian-voice/src/fetch/`），
+于是终端用户那侧不需要任何解压依赖。文件只取 int8 —— 上游整包同时带 fp32 与 int8，fp32 是体积大头。
+换模型（改了文件内容）要发新的 `voice-vN`：资产不可变，同名覆盖会让已经下过的人生效不了。
+
 ## 产品数据从哪来
 
 词库、语言模型、释义表（`data/generated/*.qj`、`dicts/*.qj`、英文词表）不在 git 里，体积约 90 MB 且由本机数据管道生成。

@@ -86,8 +86,11 @@ if (-not $SkipBuild) {
     $env:QINGJIAN_UIACCESS = '0'
     Push-Location $repo
     try {
-        cargo build -p qingjian-windows-server -p qingjian-windows-tsf
+        cargo build -p qingjian-windows-tsf
         if ($LASTEXITCODE -ne 0) { throw 'cargo build 失败' }
+        # Server 带语音（默认关的 feature，见 apps/windows/server/Cargo.toml）
+        cargo build -p qingjian-windows-server --features voice
+        if ($LASTEXITCODE -ne 0) { throw 'Server cargo build 失败' }
     }
     finally {
         Pop-Location

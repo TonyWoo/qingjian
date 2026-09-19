@@ -39,8 +39,12 @@ if (-not $SkipBuild) {
     Write-Host '构建 release 产物…' -ForegroundColor Cyan
     Push-Location $Repo
     try {
-        cargo build --release --locked -p qingjian-windows-server -p qingjian-windows-tsf -p qingjian-windows-settings
+        cargo build --release --locked -p qingjian-windows-tsf -p qingjian-windows-settings
         if ($LASTEXITCODE -ne 0) { throw "cargo build 失败（退出码 $LASTEXITCODE）" }
+        # Server 单独编、带 voice feature（默认关：开着会让别的机器去下 sherpa 的 123 MB 静态库）。
+        # 安装包不带语音模型，模型由用户在设置里按需下载，所以这里只是把识别能力编进去。
+        cargo build --release --locked -p qingjian-windows-server --features voice
+        if ($LASTEXITCODE -ne 0) { throw "Server cargo build 失败（退出码 $LASTEXITCODE）" }
         cargo build --release --locked -p qingjian-windows-tsf --target i686-pc-windows-msvc
         if ($LASTEXITCODE -ne 0) { throw "32 位 DLL cargo build 失败（退出码 $LASTEXITCODE）" }
     } finally { Pop-Location }
