@@ -9,6 +9,12 @@ repository.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = []
+# 本地语音识别：转发到 qingjian-voice 的 sherpa 后端。默认关，见那个 crate 的说明
+# （sherpa-onnx-sys 会在构建时下预编译静态库，且没有 windows-gnu 包）。
+voice = ["qingjian-voice/sherpa"]
+
 [dependencies]
 clap.workspace = true
 serde.workspace = true
@@ -22,6 +28,7 @@ qingjian-predict.workspace = true
 qingjian-lm.workspace = true
 qingjian-neural.workspace = true
 qingjian-translate.workspace = true
+qingjian-voice.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tracing-appender.workspace = true

@@ -43,4 +43,23 @@ pub enum CliError {
 
     #[error(transparent)]
     Tune(#[from] crate::tuning::TuneError),
+
+    #[error(transparent)]
+    Voice(#[from] qingjian_voice::VoiceError),
+
+    /// 语音命令要先用 `--voice-model` 接上识别器。
+    #[error("voice input needs --voice-model <dir>")]
+    VoiceModelMissing,
+
+    /// `--voice-fetch` 给的档位不在清单里。
+    #[error("unknown voice model tier {name:?}; available: [{available}]")]
+    VoiceUnknownTier { name: String, available: String },
+
+    /// 下载线程没报结果就结束了。
+    #[error("the voice model download thread stopped without a result")]
+    VoiceFetchStopped,
+
+    /// 等识别结果等超时了。
+    #[error("timed out waiting for the recognition result")]
+    VoiceTimeout,
 }

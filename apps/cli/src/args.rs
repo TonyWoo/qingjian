@@ -105,6 +105,38 @@ pub struct Args {
     #[arg(long)]
     pub neural_async: bool,
 
+    /// 下载一档语音识别模型，下完打印落到的目录后退出。档位名见 voice.lock；
+    /// 给不认识的名字会列出可选的。不需要引擎，也不碰任何界面
+    #[arg(long, value_name = "档位")]
+    pub voice_fetch: Option<String>,
+
+    /// 语音模型下到哪。缺省 data/voice（各壳会换成自己的用户数据目录）
+    #[arg(long, value_name = "目录")]
+    pub voice_dir: Option<PathBuf>,
+
+    /// 本地语音识别模型目录（sherpa-onnx 导出的那一份）。这个二进制要带 `--features voice` 编译
+    /// 才认得出模型，否则报「后端没编译进来」
+    #[arg(long, value_name = "目录")]
+    pub voice_model: Option<PathBuf>,
+
+    /// 语音识别的推理线程数（缺省 4，实测最优；调到核数以上反而更慢）
+    #[arg(long, default_value_t = qingjian_voice::DEFAULT_THREADS)]
+    pub voice_threads: i32,
+
+    /// 用这个 WAV 走一遍完整语音输入（开始 → 喂样本 → 结束 → 上屏），打印文本与耗时后退出。
+    /// 只收 16 kHz 单声道 WAV
+    #[arg(long, value_name = "WAV")]
+    pub voice_wav: Option<PathBuf>,
+
+    /// 语音识别评测：目录里每对 `<名字>.wav` + `<名字>.txt`（UTF-8 参考答案）算一条，
+    /// 出 CER 与 RTF 报告；可给多个目录
+    #[arg(long, value_name = "目录", num_args = 1..)]
+    pub eval_voice: Vec<PathBuf>,
+
+    /// 语音评测报告里列前 N 条最差的例子
+    #[arg(long, default_value_t = 10)]
+    pub voice_misses: usize,
+
     /// 逐键模式：把每个输入当作一键一键敲进去，每个前缀都查一次，打印每键各阶段耗时（性能测试用）
     #[arg(long)]
     pub typing: bool,

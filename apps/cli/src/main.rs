@@ -12,6 +12,7 @@ mod repl;
 mod replay;
 mod rescoring;
 mod tuning;
+mod voice;
 
 use std::time::Instant;
 
@@ -39,6 +40,12 @@ fn run() -> Result<(), CliError> {
     let args = Args::parse();
     let _log_guard = logging::init()?;
 
+    // 下模型不需要引擎：放在 build_engine 之前，免得为了下载白加载 90 MB 词库与释义表
+    if let Some(name) = &args.voice_fetch {
+        print!("{}", voice::run_fetch(name, args.voice_dir.clone())?);
+        return Ok(());
+    }
+
     let started = Instant::now();
     let mut engine = build_engine(&args)?;
     tracing::info!(total_ms = started.elapsed().as_millis(), "Engine 就绪");
@@ -61,6 +68,17 @@ fn run() -> Result<(), CliError> {
             args.misses,
         )?;
         print!("{report}");
+        return Ok(());
+    }
+    if let Some(path) = &args.voice_wav {
+        print!("{}", voice::run_wav(&mut engine, path)?);
+        return Ok(());
+    }
+    if !args.eval_voice.is_empty() {
+        print!(
+            "{}",
+            voice::run_eval(&mut engine, &args.eval_voice, args.voice_misses)?
+        );
         return Ok(());
     }
     if args.inputs.is_empty() {
@@ -188,6 +206,21 @@ fn build_engine(args: &Args) -> Result<Engine, CliError> {
             "语言模型已加载"
         );
         engine = engine.with_language_model(Box::new(model));
+    }
+    // 语音识别器可选：没给模型目录就不接，`--voice-*` 真用了才报错
+    if let Some(dir) = &args.voice_model {
+        let started = Instant::now();
+        let config = qingjian_voice::BackendConfig {
+            model_dir: dir.clone(),
+            threads: args.voice_threads,
+        };
+        let recognizer = qingjian_voice::load_recognizer(&config)?;
+        tracing::info!(
+            load_ms = started.elapsed().as_millis(),
+            model = %dir.display(),
+            "语音识别已启用"
+        );
+        engine = engine.with_speech_recognizer(recognizer);
     }
     if let Some(dir) = &args.neural {
         let started = Instant::now();
