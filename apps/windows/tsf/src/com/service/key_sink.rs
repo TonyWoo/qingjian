@@ -63,12 +63,23 @@ impl ITfKeyEventSink_Impl for TextService_Impl {
 
     /// 翻译选中文字的保留键命中：当作按下了那个组合键转发给 Server（绕过 `would_eat`）。
     fn OnPreservedKey(&self, pic: Ref<ITfContext>, rguid: *const GUID) -> Result<BOOL> {
-        if unsafe { *rguid } != preserved::GUID_TRANSLATE || self.keyboard_disabled(&pic) {
-            return Ok(FALSE);
-        }
-        let Some(combo) = self.translate_combo.get() else {
+        // 两个保留键（翻译选中文字 / 语音输入）走同一条路：合成一个带物理修饰键的按键喂给
+        // Server，由 Server 按字符 + 修饰键与配置比对，它不需要知道保留键这回事。
+        let guid = unsafe { *rguid };
+        let combo = if guid == preserved::GUID_TRANSLATE {
+            self.translate_combo.get()
+        } else if guid == preserved::GUID_VOICE {
+            self.voice_combo.get()
+        } else {
             return Ok(FALSE);
         };
+        let Some(combo) = combo else {
+            return Ok(FALSE);
+        };
+        // 密码框里不拦：让组合键照常交给应用
+        if self.keyboard_disabled(&pic) {
+            return Ok(FALSE);
+        }
         let event = preserved::key_event(combo, self.mode_state.english());
         Ok(self.forward_key(pic, event).into())
     }
