@@ -38,6 +38,10 @@ $repo = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot
 $table = Join-Path $repo 'assets\wubi\wubi86.tsv'
 $server = Join-Path $repo 'target\debug\qingjian-server.exe'
 $dll = Join-Path $repo 'target\debug\qingjian_tsf.dll'
+# 设置程序也要换：安装目录那份是上一次打包时的，新加的页（比如「语音」）它没有。
+# 只拷 exe 就够 —— WinAppSDK 的运行时文件在 devtest 里已经由镜像带过来了，
+# 实测两边版本一致（microsoft.ui.xaml.dll 等大小完全相同）。
+$settings = Join-Path $repo 'target\debug\qingjian-settings.exe'
 $config = Join-Path $env:APPDATA 'Qingjian\config.toml'
 $logs = Join-Path $env:APPDATA 'Qingjian\logs'
 
@@ -60,6 +64,7 @@ if (-not $SkipBuild) {
 else {
     Assert-Path $server 'Server 产物（去掉 -SkipBuild 先编一次）'
     Assert-Path $dll 'TSF DLL 产物（去掉 -SkipBuild 先编一次）'
+    Assert-Path $settings '设置程序产物（去掉 -SkipBuild 先编一次）'
 }
 
 if (-not $SkipBuild) {
@@ -91,12 +96,15 @@ if (-not $SkipBuild) {
         # Server 带语音（默认关的 feature，见 apps/windows/server/Cargo.toml）
         cargo build -p qingjian-windows-server --features voice
         if ($LASTEXITCODE -ne 0) { throw 'Server cargo build 失败' }
+        cargo build -p qingjian-windows-settings
+        if ($LASTEXITCODE -ne 0) { throw '设置程序 cargo build 失败' }
     }
     finally {
         Pop-Location
     }
     Assert-Path $server 'Server 产物'
     Assert-Path $dll 'TSF DLL 产物'
+    Assert-Path $settings '设置程序产物'
 }
 
 Write-Host '== 停掉在跑的 Server' -ForegroundColor Cyan
@@ -116,13 +124,14 @@ robocopy $InstallDir $WorkDir /MIR /NFL /NDL /NJH /NJS | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "robocopy 失败（exit $LASTEXITCODE）" }
 
 Copy-Item -LiteralPath $server -Destination $WorkDir -Force
+Copy-Item -LiteralPath $settings -Destination $WorkDir -Force
 New-Item -ItemType Directory -Force -Path (Join-Path $WorkDir 'assets\wubi') | Out-Null
 Copy-Item -LiteralPath $table -Destination (Join-Path $WorkDir 'assets\wubi') -Force
 # DLL 也拷过来再注册：从 `target\debug` 注册的话，那个文件会被加载它的进程锁住，
 # 之后 `cargo build` 写不进去（链接报 LNK1104，看着像代码坏了）
 $workDll = Join-Path $WorkDir 'qingjian_tsf.dll'
 Copy-Item -LiteralPath $dll -Destination $workDll -Force
-Write-Host '   新 Server、TSF DLL 与五笔码表已就位'
+Write-Host '   新 Server、TSF DLL、设置程序与五笔码表已就位'
 
 $elevated = [Security.Principal.WindowsPrincipal]::new(
     [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -162,6 +171,10 @@ Start-Sleep -Seconds 3
 
 Write-Host ''
 Write-Host '接下来手动做这四步：' -ForegroundColor Cyan
+Write-Host ''
+Write-Host '  0. 设置程序也换成了刚编的那份（新加的页只有它才有）：'
+Write-Host "       $WorkDir\qingjian-settings.exe"
+Write-Host '     也可以在仓库里直接跑 target\debug\qingjian-settings.exe——配置与数据都在 %APPDATA%\Qingjian\，跟跑哪个 exe 无关。'
 Write-Host ''
 Write-Host '  1. 看日志确认两边都对了（应该有两行「形码码表已载入」与「协议」相关的警告不该出现）：'
 Write-Host "       Get-Content `"$logs\qingjian-server.*.log`" -Tail 20"
