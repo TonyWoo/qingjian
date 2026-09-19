@@ -108,6 +108,21 @@ impl Router {
         if self.translation.is_some() {
             return self.handle_translation_review(session, &event);
         }
+        // 语音触发键：不组句时按一下开始录音、再按一下结束。与「翻译选中文字」一样在
+        // apply_key 之前拦 —— 晚一步的话 Ctrl 系组合会被 has_command_key 放行给应用。
+        // 起不来的话（没接模型、麦克风打不开、正在组句）不吃这个键，让它照常走。
+        if self.engine.composition().is_empty()
+            && self.matches_voice_combo(&event)
+            && self.toggle_voice()
+        {
+            let frame = self.current_frame();
+            return ServerMessage::KeyResult {
+                session,
+                outcome: KeyOutcome::Consumed,
+                commit: None,
+                frame,
+            };
+        }
         if self.engine.composition().is_empty()
             && self.engine.prediction_enabled()
             && self.matches_translate_combo(&event)
@@ -124,7 +139,7 @@ impl Router {
                 request: self.selection_seq,
             };
         }
-        let (commit, outcome) = match self.apply_key(&event) {
+        let (mut commit, outcome) = match self.apply_key(&event) {
             Effect::Changed(commit) => {
                 self.recompose();
                 (commit, KeyOutcome::Consumed)
@@ -132,6 +147,19 @@ impl Router {
             Effect::Navigated => (None, KeyOutcome::Consumed),
             Effect::Passthrough => (None, KeyOutcome::Passthrough),
         };
+        // 语音识别结果挂起时，搭这次按键的车上屏。**只有被吃掉的键带得走**：
+        // 放行且没有可打印字符的键，DLL 会把 commit 丢掉（key_sink.rs 的 `Next::Document`
+        // 分支），带上等于丢字 —— 那种键就让它继续挂着等下一个。
+        // 顺序上语音在前：话是先说的，键是后按的。
+        if matches!(outcome, KeyOutcome::Consumed)
+            && let Some(pending) = self.voice.take_pending()
+        {
+            tracing::info!(chars = pending.chars().count(), "语音文本随这次按键上屏");
+            commit = Some(match commit {
+                Some(text) => format!("{pending}{text}"),
+                None => pending,
+            });
+        }
         self.poll_prediction();
         let frame = self.current_frame();
         self.reconcile_candidates(&frame);

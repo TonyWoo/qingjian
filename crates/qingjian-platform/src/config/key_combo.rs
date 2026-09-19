@@ -27,6 +27,19 @@ impl KeyCombo {
         key: 't',
     };
 
+    /// 语音输入触发键的缺省：按一下开始录音、再按一下结束。
+    ///
+    /// 不与其他缺省冲突（译词是 Ctrl 系、删候选是 Shift、翻译选中文字是 Ctrl+Alt+T）。
+    pub const VOICE_DEFAULT: Self = Self {
+        modifiers: Modifiers {
+            option: false,
+            shift: true,
+            control: true,
+            command: false,
+        },
+        key: 'v',
+    };
+
     /// 配置文件里的写法。
     pub fn key_string(&self) -> String {
         format!("{}+{}", self.modifiers.key(), self.key)

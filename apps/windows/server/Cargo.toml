@@ -14,8 +14,16 @@ path = "src/main.rs"
 [build-dependencies]
 embed-manifest.workspace = true
 
+[features]
+default = []
+# 本地离线语音输入。默认关：sherpa-onnx-sys 的 build.rs 会按目标三元组下预编译静态库
+# （Windows x64 那份 123 MB），且官方没有 windows-gnu 包 —— 开着会让 Linux 的 CI job 与
+# 跨平台 check 都去下它。产品构建、安装器与真机联调带 `--features voice`。
+voice = ["qingjian-voice/sherpa", "qingjian-voice/capture"]
+
 [dependencies]
 qingjian-core.workspace = true
+qingjian-voice.workspace = true
 qingjian-dictionary.workspace = true
 qingjian-learning.workspace = true
 qingjian-lm.workspace = true

@@ -147,6 +147,7 @@ impl Router {
     pub fn tick(&mut self) {
         self.attach_loaded_model();
         self.advance_rescoring();
+        self.advance_voice();
         self.poll_config_reload();
     }
 

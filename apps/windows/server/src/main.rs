@@ -180,6 +180,7 @@ fn main() {
     let mut router = Router::new(engine, router_config.clone());
     let model_path = dispatch::find_model(user_dir().as_deref(), &root);
     router.configure_local_model(model_path.clone(), &config.model);
+    router.configure_voice(user_dir(), root.clone(), &config.voice);
     router.configure_code_table(dispatch::find_code_table(user_dir().as_deref(), &root));
     if let Some(path) = config_path() {
         router.watch_config(&config, path, root.clone(), user_dir());

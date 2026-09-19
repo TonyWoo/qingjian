@@ -3242,6 +3242,7 @@ dependencies = [
  "qingjian-predict",
  "qingjian-render",
  "qingjian-translate",
+ "qingjian-voice",
  "thiserror 2.0.20",
  "toml_edit",
  "tracing",

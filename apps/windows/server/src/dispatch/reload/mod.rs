@@ -172,6 +172,9 @@ impl Router {
         }
         self.reconcile_status();
         self.apply_model_config(&config.model);
+        // 语音模型是设置程序在另一个进程里下的，这里每次都重扫目录 —— 下完之后它写一个
+        // 配置键触发 mtime 变化，这个分支就是接住那个变化的地方。
+        self.apply_voice_config(&config.voice);
 
         let Some(reload) = &mut self.reload else {
             return;

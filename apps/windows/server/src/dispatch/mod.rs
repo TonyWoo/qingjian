@@ -14,14 +14,15 @@ mod rescore;
 mod session;
 mod status;
 mod translate;
+mod voice;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use qingjian_core::Engine;
-use qingjian_platform::LocalModelConfig;
 use qingjian_platform::protocol::{ClientMessage, Frame, ScreenRect, ServerMessage, SessionId};
+use qingjian_platform::{LocalModelConfig, VoiceConfig};
 
 pub use self::candidates::{CandidateSink, NoopSink, RenderSettings};
 pub use self::code::find_code_table;
@@ -34,6 +35,7 @@ use self::rescore::{ModelLoader, RescoreState};
 use self::session::SessionInfo;
 pub use self::status::{NoopStatusSink, StatusEvent, StatusSink, StatusView};
 use self::translate::Translation;
+pub use self::voice::find_model as find_voice_model;
 
 /// 学习数据落盘间隔（与 macOS 壳一致）；Server 没有定时器，借消息节拍看时间。
 const LEARNING_FLUSH_INTERVAL: Duration = Duration::from_secs(60);
@@ -115,6 +117,16 @@ pub struct Router {
 
     /// 重排的防抖 / 轮询进行态。
     rescore: RescoreState,
+
+    /// 本地离线语音输入：麦克风与待上屏的识别结果。
+    voice: voice::Voice,
+
+    /// 找语音模型的根目录：用户数据目录与随包目录。配置变化时按它重扫，
+    /// 因为模型是设置程序在另一个进程里下的。
+    voice_roots: Option<(Option<PathBuf>, PathBuf)>,
+
+    /// 上次套用的 `[voice]`，变了才重新接 / 卸识别器。
+    applied_voice: VoiceConfig,
 }
 
 impl Router {
@@ -148,6 +160,9 @@ impl Router {
             model_loader: None,
             applied_model: LocalModelConfig::default(),
             rescore: RescoreState::default(),
+            voice: voice::Voice::default(),
+            voice_roots: None,
+            applied_voice: VoiceConfig::default(),
         }
     }
 

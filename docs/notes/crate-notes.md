@@ -217,6 +217,16 @@ IMK 输入法，源码按 `app / host / imk / candidates / menubar / preferences
 TSF 原有数字 / OEM 标点 / 空格键码按当前布局用 `ToUnicodeEx` 解析（bit 2 避免改变键盘状态），
 仅接受单个非代理项 UTF-16 单元。字母、小键盘和 AltGr 处理不变，不保证组合音符输入。
 
+**语音输入**（`dispatch/voice/`，Server 侧；feature `voice` 默认关，见 `apps/windows/server/Cargo.toml`）：触发键是 `[shortcut] voice`（缺省 `shift+ctrl+v`），
+在 `apply_key` **之前**拦（晚了会被 `has_command_key` 放行给应用），按一下开始录音、再按一下停。模型目录由 `voice::find_model` 找：
+用户数据目录 `voice/<档位>` 优先，随包 `data/voice/<档位>` 兜底；档位留空时先用 `voice.lock` 的第一档，清单还空就认目录里第一个有 `.onnx` 的
+（开发期手动解压一个进去就能跑）。**每次 `[voice]` 变化都重扫目录** —— 模型是设置程序在另一个进程里下的，Server 不会自己发现，靠它写配置键触发 mtime 变化。
+
+**识别结果走「挂在下一个按键上」**：攒在 `Voice::pending`，下一次**被吃掉**的按键把它拼进 `KeyResult.commit` 带走。
+之所以不立刻上屏：那要给 poll 加一条上屏通道（改协议 + 升 `PROTOCOL_VERSION`），而且 DLL 录音期间根本不在轮询
+（`poll_once` 的守卫是「在组句或翻译评审中」），插字还得在非按键时机申请编辑会话 —— 三处联动、风险全压在真机上。
+硬约束：**放行的功能键会把 commit 丢掉**（`key_sink.rs` 里 `consumed: false` 且无打印字符的分支直接 `false`），所以只有 Consumed 的键带得走。
+
 词库导入（设置「词库」页）走 `qingjian-dictionary::import` 转成 `.qj`（空词库拒绝），多选批量、成功的从 `[dictionaries] disabled` 摘掉、页面显示每个文件的结果；
 Server 每次轮询比对用户 `dicts\` 的路径 / mtime / 长度快照，配置没变也重载新增、同名更新与移除；配置解析失败时词库沿用上次有效的开关（#36）。
 

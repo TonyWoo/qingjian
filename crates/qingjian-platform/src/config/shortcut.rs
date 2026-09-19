@@ -23,6 +23,9 @@ pub struct ShortcutConfig {
 
     /// 数字键配这些修饰键：删掉候选（用户词整个删掉，词库词清掉对它的学习）。
     pub delete_candidate: Modifiers,
+
+    /// 本地离线语音输入：按一下开始录音、再按一下结束。
+    pub voice: KeyCombo,
 }
 
 impl Default for ShortcutConfig {
@@ -38,6 +41,7 @@ impl Default for ShortcutConfig {
             translation_second,
             translate_selection: KeyCombo::TRANSLATE_DEFAULT,
             delete_candidate: Modifiers::SHIFT,
+            voice: KeyCombo::VOICE_DEFAULT,
         }
     }
 }
@@ -53,6 +57,15 @@ impl ShortcutConfig {
             Self::default().delete_candidate
         } else {
             self.delete_candidate
+        }
+    }
+
+    /// 语音触发键；与「翻译选中文字」撞了就退回缺省。
+    pub fn voice_combo(&self) -> KeyCombo {
+        if self.voice == self.translate_selection {
+            KeyCombo::VOICE_DEFAULT
+        } else {
+            self.voice
         }
     }
 
