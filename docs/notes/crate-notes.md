@@ -37,7 +37,18 @@ TSV 解析、查询与生成工具把 `lue` / `nue` 统一成 `lve` / `nve`。
 
 `EngineSession` 保存可挂起的组句、标点、历史与学习链，`Engine::swap_session` 在同一个引擎里交换输入状态，共用词库与落盘服务。切换上下文时清除查询及异步预测缓存，并由平台恢复各自私密状态。
 
-`Engine::discard_input` / `EngineSession::discard_input` 用于隐私能力变化时无痕清理输入，包括透传缓冲、学习链和暂存词汇曝光；`set_private` 只切换写入开关，保留已输入的组句。
+`Engine::discard_input` / `EngineSession::discard_input` 用于隐私能力变化时无痕清理输入，包括透传缓冲、学习链和暂存词汇曝光；`set_private` 只切换写入开关，保留已输入的组句，并调 `cancel_voice`（密码框里绝不能录，在飞的结果也不能落地）。
+
+语音输入在 `engine/voice/`：`SpeechRecognizer` trait + `VoiceWorker`（后台线程 + 双 mpsc，采样一条都不能丢，
+与 `RescoreWorker` 那个「攒了好几条只算最后一条」不同）+ `VoiceSession`（状态、缓冲、序号）。`start_voice` 在没接识别器、
+私密输入、或还在组句时返回 `false`（组句中途不抢断，那截拼音算上屏还是丢弃由壳决定）；`start_voice` / `cancel_voice` 都 bump 序号，
+`poll_voice` 按序号丢掉过期的结果。`poll_voice` 内部就地 `commit_voice` 上屏并返回最终文本（繁体模式下已是繁体），
+不拆成两步——拆开只会给每个壳留一次「忘了调上屏，于是学习与日志整条断掉」的机会。
+`commit_voice` 形状照抄 `accept_prediction`：先清 `last_query` / `retype_snapshot` / `composition_started`
+（语音没有组句，不清的话日志会带上**上一段拼音**的 scope / pinyin / top，还会凭空记一条 retype），
+再走繁体正向转换 + 反向登记、日志（`InputSource::Voice`）、个人 n-gram（**不进词频 / 用户词**：`Learner` 以拼音音节为键，
+语音没有音节，反查会因多音字写错且不可撤销），最后清 `traditional_map`（它只在 `clear()` / `take_raw()` 里清，语音两条路都不走）。
+常量 `VOICE_SAMPLE_RATE` 16000 / `MAX_VOICE_SECONDS` 60 / `MIN_VOICE_SECONDS` 0.3。实现在 `crates/qingjian-voice`。
 
 ## crates/qingjian-translate
 
@@ -120,6 +131,27 @@ Engine 侧在 `engine/rescoring/`：接了打分器就取 Viterbi 前 `RESCORE_P
 （过渡期退路，偏好设置「候选窗口」页可选）；`[general] font` 是候选窗字族名（空为系统字体，`bitmap/font_files.rs` 用 CoreText 按字族名找文件只加载那几个，没装就回系统字体；
 设置页 `preferences/font_picker/` 是搜索框 + 列表）。设计与验收见 `docs/design/rendering.md`。
 
+## crates/qingjian-voice
+
+本地离线语音识别：Core `SpeechRecognizer` trait 的实现加音频读入。`default = []`，feature `sherpa` 打开 sherpa-onnx 后端。
+
+- `backend/sherpa.rs`：用 `OfflineRecognizer`（离线、整段进整段出）。**`streaming-zipformer-*` 是在线模型、走 `OnlineRecognizer`，这里用不了** ——
+  离线且中英双语的现实候选是 SenseVoice（约 228 MB，带标点）与 Whisper。模型家族按目录里的文件名认（`detect`）：
+  有 encoder + decoder + joiner 是 transducer，只有 encoder + decoder 是 Whisper，单个 `model.onnx` 按目录名分 SenseVoice / Paraformer
+  （SenseVoice 用 `language = "auto"` + `use_itn = true`）。`OfflineRecognizer` 在 crate 里已 `unsafe impl Send + Sync`。
+- `audio/wav.rs`：只收 16 kHz（sherpa 的契约），多声道取平均下混，别的采样率明确报错。重采样等上麦克风采集时再做。
+- 构建：`sherpa-onnx-sys` 的 build.rs 会按目标三元组下预编译静态库（Windows x64 静态 MT 那份 123 MB），
+  **且 `cargo check` 下照样会跑**；官方没有 windows-gnu 包，所以 feature 默认关（否则本仓库习惯的
+  `cargo check --target x86_64-pc-windows-gnu` 直接挂）。`SHERPA_ONNX_ARCHIVE_DIR` 可指向放着预下载归档的目录免得联网，CI 靠缓存 `target/`。
+- `fetch/`：模型下载。模型不进安装包（几百 MB，多数用户不用语音），改成设置里按需下载。
+  清单是 crate 根的 `voice.lock`（**用 `include_str!` 编进二进制**，所以设置界面不用去磁盘找它，也不会出现清单与二进制对不上），
+  由 `tools/release/pack-voice.sh` 生成；`url` 指向不可变预发布 tag `voice-vN`，与产品数据的 `data-vN` 分开。
+  **每个文件一个独立资产、逐个校验 SHA256，不打压缩包** —— 运行时因此不需要任何解压依赖。
+  下载全程在正式目录旁的临时目录里，全部文件校验通过才改名过去（先把旧的挪成 `.old` 再改名，最后删），
+  失败一律清掉临时目录、不动用户已装好的那一份。事件走 `FetchEvent`（`Progress` / `Done` / `Failed`），
+  壳在定时器里 `poll`；`is_finished()` 用来判断线程意外死了、别死等。
+- 麦克风采集（cpal）还没做，等上平台壳时加。设计与取舍见 `docs/design/voice-input.md`。
+
 ## apps/cli
 
 测试工具，`cargo run -p qingjian-cli -- kaifa`。
@@ -134,6 +166,14 @@ Engine 侧在 `engine/rescoring/`：接了打分器就取 Viterbi 前 `RESCORE_P
   所以只在方案串变化时才换码表（`Engine::set_code_table` 收所有权，换一次要克隆 8.9 万条）。日志里是形码但没给 `--wubi` 时，
   那部分只计数——拿拼音的读法喂形码的键会算出看着像真的、实则无意义的命中率。
 - `--tune 名=值`（逗号分隔）覆盖个人 n-gram 插值与敲错代价的常数扫网格（名字见 `apps/cli/src/tuning.rs`，Core 侧是 `Engine::set_interpolation` / `set_typo_costs`，壳只用缺省值）。
+- `--voice-fetch <档位>` 下一档语音模型（`--voice-dir` 改落点，缺省 `data/voice`），下完打印路径后退出；
+  不需要引擎，也**不走 build_engine**（免得为了下载白加载 90 MB 词库与释义表）。给不认识的档位会列出可选的。
+  这是「下载 → 校验 → 落盘」这条链路的无界面验证入口。
+- `--voice-model <目录>` 接上本地语音识别器（要 `--features voice` 编译才认得出模型，否则报「后端没编译进来」）；
+  `--voice-wav <wav>` 让一个 WAV 走一遍 **Core 的完整语音状态机**（开始 → 喂样本 → 结束 → 轮询）再打印文本与 RTF ——
+  刻意不直接调识别器，这样 CLI 就是第二个壳，平台壳将来要走的路径先在这里验掉。
+  `--eval-voice <目录>...` 按每对 `<名字>.wav` + `<名字>.txt` 算 CER / RTF 报告（`--voice-misses N` 列最差的几条）。
+  CER 按**字符**算，不能复用 Core 里那个按字节的 `edit_distance`（会把一个汉字算成三个）。
 - `--eval-text <文本>...` 整句评测：把用户自己写的中文文本按标点切句、按词库读音转成全拼，冷启动喂给引擎看整句能不能还原原句
   （首选命中率 / 字准确率 / 查询耗时；不依赖日志里当时选了什么，给整句排序与语言模型的改动当尺子），`--eval-save` 冻结成 `句子\t拼音\t上文` 三列文件，
   之后直接 `--eval-text` 它保证比的是同一份句子（本机的在 `data/eval/sentences.tsv`）。排序、整句、纠错的改动先跑它们再合。

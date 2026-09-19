@@ -118,3 +118,12 @@
 - [ ] 五笔（86 版）：方案与分期见 [wubi.md](wubi.md)，第一期 Core + CLI + Windows；
   `[general] scheme` 收敛与配置迁移一起做（顺带解掉〇里的「配置文件版本迁移」）
 - [ ] 复杂方案收尾（与上一条共用「输入方案」抽象）：注音只在 Core 与 Windows 接了，macOS 侧还没接；双拼的方案切换要等 `[general] scheme`
+- [~] **本地离线语音输入**：方案与取舍见 [design/voice-input.md](../design/voice-input.md)。Core 的 trait / worker / 上屏与 `qingjian-voice`
+  的后端骨架、CLI 的 `--voice-wav` / `--eval-voice` 已就位（2026-09-18）。
+  **模型选型改用 Whisper**（2026-09-19）：SenseVoice 的权重是 FunASR 自定义协议、**非 OSI 认证**、带署名与行为终止条款，不适合本项目；
+  Whisper 的代码与权重都是 MIT，可自由再分发。实测它**自带标点与大小写**（原先以为它没有、不如 SenseVoice，是错的），逐字准确率也好。
+  **产品定位为「短句输入」**（2026-09-19）：Whisper 在 CPU 上 RTF 约 0.25，说 10 秒要等约 2.5 秒；不做 VAD 分段边说边上屏，保持整段一次出结果。
+  **模型不进安装包**（几百 MB），改成设置里可选下载：清单 `voice.lock` + `qingjian-voice::fetch` + CLI `--voice-fetch` 已就位。
+  **待办**：`tools/release/pack-voice.sh` 与 `voice.lock` 的真实值（依赖上面两个 Whisper 整包）、用真实音频集测 CER 与 RTF 定两档模型、
+  麦克风采集（cpal）与触发键、Windows 设置页 + **Server 重扫模型目录**（`find_model` 只在启动扫一次）、macOS 偏好设置页、
+  许可与署名（`assets/voice/README.md` + 「关于」页）
