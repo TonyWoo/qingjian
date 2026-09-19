@@ -9,3 +9,12 @@
 # 待填：档位与文件要等 tools/release/pack-voice.sh 从上游 Whisper 包里挑出 int8 文件、
 # 重新托管之后才能确定（连同体积一起）。档位具体是哪两个模型由 apps/cli 的 CER / RTF
 # 实测决定，见 docs/design/voice-input.md。
+
+[base]
+label = "标准"
+note = "中英混说，体积小、认得准"
+files = [
+  { name = "base-encoder.int8.onnx", url = "https://github.com/TonyWoo/qingjian/releases/download/voice-v1/base-encoder.int8.onnx", sha256 = "0b8fb1304b6109976038efff5ace81720e00386f3ff6b54ee8c75291ca0a1e11", size = 29120534 },
+  { name = "base-decoder.int8.onnx", url = "https://github.com/TonyWoo/qingjian/releases/download/voice-v1/base-decoder.int8.onnx", sha256 = "9759d217388a01b3a4c7c15533201067b48ae819c4daafc8624e64b9409dc02d", size = 130672026 },
+  { name = "base-tokens.txt", url = "https://github.com/TonyWoo/qingjian/releases/download/voice-v1/base-tokens.txt", sha256 = "b34b360dbb493e781e479794586d661700670d65564001f23024971d1f2fa126", size = 816730 },
+]
