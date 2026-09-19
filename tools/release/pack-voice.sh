@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 把一档语音识别模型发成一个不可变的语音 Release（voice-vN，预发布），并更新 tools/release/voice.lock。
+# 把一档语音识别模型发成一个不可变的语音 Release（voice-vN，预发布），并更新 crates/qingjian-voice/voice.lock。
 # 终端用户在设置里按这份清单下载（crates/qingjian-voice 的 fetch）。
 #
 # 只挑 int8 的 encoder / decoder 加 tokens：上游整包同时带 fp32 与 int8（SenseVoice 那个 999 MB 里
@@ -15,7 +15,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="$ROOT/target/release-voice"
-LOCK="$ROOT/tools/release/voice.lock"
+# 锁文件在 crate 根：`fetch/mod.rs` 用 `include_str!("../../voice.lock")` 把它编进二进制，
+# 所以它必须在 crate 里面，不能跟 data.lock 一样放这儿
+LOCK="$ROOT/crates/qingjian-voice/voice.lock"
 cd "$ROOT"
 
 MODE=upload
@@ -105,7 +107,7 @@ if gh release view "$TAG" >/dev/null 2>&1; then
   done
 else
   gh release create "$TAG" --prerelease --target "$(git rev-parse HEAD)" --title "语音模型 $TAG" \
-    --notes "本地离线语音识别模型（只含 int8 的 encoder / decoder 与 tokens）。不可变；仓库 tools/release/voice.lock 钉住要用哪一版，终端用户在设置里按它下载。"
+    --notes "本地离线语音识别模型（只含 int8 的 encoder / decoder 与 tokens）。不可变；仓库 crates/qingjian-voice/voice.lock 钉住要用哪一版，终端用户在设置里按它下载。"
 fi
 
 gh release upload "$TAG" "$OUT/$TIER"/* --clobber=false
