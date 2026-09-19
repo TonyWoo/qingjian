@@ -42,8 +42,12 @@ TSV 解析、查询与生成工具把 `lue` / `nue` 统一成 `lve` / `nve`。
 语音输入在 `engine/voice/`：`SpeechRecognizer` trait + `VoiceWorker`（后台线程 + 双 mpsc，采样一条都不能丢，
 与 `RescoreWorker` 那个「攒了好几条只算最后一条」不同）+ `VoiceSession`（状态、缓冲、序号）。`start_voice` 在没接识别器、
 私密输入、或还在组句时返回 `false`（组句中途不抢断，那截拼音算上屏还是丢弃由壳决定）；`start_voice` / `cancel_voice` 都 bump 序号，
-`poll_voice` 按序号丢掉过期的结果。`poll_voice` 内部就地 `commit_voice` 上屏并返回最终文本（繁体模式下已是繁体），
-不拆成两步——拆开只会给每个壳留一次「忘了调上屏，于是学习与日志整条断掉」的机会。
+`poll_voice` 按序号丢掉过期的结果。**`poll_voice` 只取结果、不上屏，`accept_voice` 才上屏**
+（2026-09-19 拆开，见 `docs/design/voice-input.md`「为什么改成进候选窗选一下」）：壳把文字摆进候选窗让用户选，
+接受才走 `commit_voice`、返回最终文本（繁体模式下已是繁体）；丢弃那条路什么都不留 ——
+原来「取到就就地上屏」会让用户没要过的文本进个人 n-gram 与输入日志，撤不回来。
+CLI 的 `--eval-voice` 只用 `poll_voice`（拿评测集跑一遍不该把那些文本学进用户词典），
+`--voice-wav` 两条都走，验的是完整链路。
 `commit_voice` 形状照抄 `accept_prediction`：先清 `last_query` / `retype_snapshot` / `composition_started`
 （语音没有组句，不清的话日志会带上**上一段拼音**的 scope / pinyin / top，还会凭空记一条 retype），
 再走繁体正向转换 + 反向登记、日志（`InputSource::Voice`）、个人 n-gram（**不进词频 / 用户词**：`Learner` 以拼音音节为键，
@@ -222,10 +226,32 @@ TSF 原有数字 / OEM 标点 / 空格键码按当前布局用 `ToUnicodeEx` 解
 用户数据目录 `voice/<档位>` 优先，随包 `data/voice/<档位>` 兜底；档位留空时先用 `voice.lock` 的第一档，清单还空就认目录里第一个有 `.onnx` 的
 （开发期手动解压一个进去就能跑）。**每次 `[voice]` 变化都重扫目录** —— 模型是设置程序在另一个进程里下的，Server 不会自己发现，靠它写配置键触发 mtime 变化。
 
-**识别结果走「挂在下一个按键上」**：攒在 `Voice::pending`，下一次**被吃掉**的按键把它拼进 `KeyResult.commit` 带走。
-之所以不立刻上屏：那要给 poll 加一条上屏通道（改协议 + 升 `PROTOCOL_VERSION`），而且 DLL 录音期间根本不在轮询
-（`poll_once` 的守卫是「在组句或翻译评审中」），插字还得在非按键时机申请编辑会话 —— 三处联动、风险全压在真机上。
-硬约束：**放行的功能键会把 commit 丢掉**（`key_sink.rs` 里 `consumed: false` 且无打印字符的分支直接 `false`），所以只有 Consumed 的键带得走。
+**停止不看有没有组句**：触发键在 `handle_key` 里拦，但只比组合键 —— 录着的时候用户多半正敲着拼音，那时按第二下必须停得下来。
+真机踩过：外层加过一条 `composition().is_empty()` 守卫，本意是「组句中途不抢断」（那是对**开始**说的），结果把停止一起挡了，
+第二下掉进普通按键路径、录音一直挂在 `Recording`，日志里连「录音结束」都没有；「要开始时才看组句」的判断在 `toggle_voice` 里。
+录到 `MAX_VOICE_SECONDS` 就地自动停（不覆盖已有样本，再录只会被丢，让用户白说一整段更糟）。
+停下的日志带 `seconds`：**0.0 就是麦克风一个样本都没给**，真机排查采集通没通只看这一条。
+
+**状态条最左边一格是语音状态**（`VoiceCue`：录音中 / 识别中 / 空格上屏）：语音是唯一「按下去当场什么都不发生」的输入方式
+（开始不落字、停下还要等识别），没有这一格用户会以为按键没生效。中英模式走 DLL 推、语音状态不走
+（DLL 只管按键），由 `advance_voice` 每个 tick 对一次账，变了才重画（`reconcile_voice_status`）。这一格不响应点击：
+点击是按 x 落在哪一格的右边界之前来分的，所以它得在 `Placement::cells` 里占一格（`StatusAction::None`）。
+
+**识别结果当候选摆进候选窗**（`Frame.voice`，`VoicePrompt::{Transcribing, Ready}`）：识别好之后
+`composed::current_frame` 把它挂在帧上，`ui/candidates/render_data.rs` 把它塞成 `rows` 里的第 1 条
+（GDI 那条退路共用 `RenderData`，一起就有了），用户按空格 / `1` 接受、`Esc` 丢弃。
+`Frame::is_empty` **把语音算作空** —— 算进去的话 DLL 会当成在组句，去轮询、去申请编辑会话、失焦走 `commit_pending`，全是错的。
+接受 / 丢弃在 `handle_key` 里排在触发键**之前**（结果还挂着时再按触发键 = 重录）；敲别的键 = 用户不要这段，
+丢掉之后照常处理这个键。待选结果在 `reset_composition` 里一起作废：它属于刚才那个文档。
+
+**候选窗的位置**用 `caret_rect` 而不是 `last_rect`：识别结果是在窗口收着的时候到的（说完话拼音早没了），
+而 `hide_candidate_window` 会把 `last_rect` 清掉。`caret_rect` 收窗口不清，只在切会话时清。
+
+**DLL 侧**（`com/`）：`Shared::voice` 存 Server 那一句（按键回帧与轮询回帧都同步一遍）；
+`would_eat` 在 `voice_ready()` 时拦空格 / `1` / `Esc`（`key::event::is_voice_choice`，与 Server 的 `voice_choice` 是同一组键，
+两边一起改）；`poll_once` 在语音挂着时每拍拉一次 Server（80 ms —— 等下一次按键才同步的话，用户看见候选窗到按空格之间那一下会漏给应用）；
+`OnPreservedKey` 命中语音键时请一个只读编辑会话（`edit/caret.rs`）量光标位置报上去 ——
+位置平时只在组句里报（`composition::report_caret`），而语音候选恰好落在没有组句的时候。
 
 设置程序的「语音」页（`settings/src/panel/pages/voice.rs`）管开关与模型下载：开关写 `[voice] enabled`，下载走 `spawn_background` 跑 `qingjian_voice::fetch::Download`，
 下到用户数据目录 `voice/<档位>`；**下完写一次 `[voice] tier` 与 `enabled = true`** —— 那既是记录，也是给 Server 的信号（它每秒看 config.toml 的 mtime，靠这次写入触发重扫模型目录）。

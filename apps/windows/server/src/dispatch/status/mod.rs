@@ -7,11 +7,12 @@ mod event;
 mod sink;
 mod view;
 
+use qingjian_core::VoiceState;
 use qingjian_platform::{Config, Scheme, scheme_label};
 
 pub use self::event::StatusEvent;
 pub use self::sink::{NoopStatusSink, StatusSink};
-pub use self::view::StatusView;
+pub use self::view::{StatusView, VoiceCue};
 use super::Router;
 
 impl Router {
@@ -84,11 +85,32 @@ impl Router {
         }
     }
 
+    /// 语音现在处在哪一阶段，状态条拿它显示。
+    fn voice_cue(&self) -> VoiceCue {
+        match self.engine.voice_state() {
+            VoiceState::Recording => VoiceCue::Recording,
+            VoiceState::Transcribing => VoiceCue::Transcribing,
+            // 认完了但文字还挂在 `Voice::pending` 里等按键捎走 —— 这一格是「再按一下」的全部提示
+            VoiceState::Idle if self.voice.has_pending() => VoiceCue::Ready,
+            VoiceState::Idle => VoiceCue::Off,
+        }
+    }
+
+    /// 语音阶段变了才重画状态条。每个 tick 都调它，没变就直接返回，不去惊动 UI 线程。
+    pub(super) fn reconcile_voice_status(&mut self) {
+        if self.voice_cue() == self.status_voice {
+            return;
+        }
+        self.reconcile_status();
+    }
+
     /// 开着且青简在前台就显示，否则收起。热加载后也调一次。
     pub(super) fn reconcile_status(&mut self) {
+        self.status_voice = self.voice_cue();
         match self.status_mode {
             Some(english) if self.config.status_enabled => {
                 self.status.show_status(StatusView {
+                    voice: self.status_voice,
                     english,
                     zhuyin: self.config.scheme == Scheme::Zhuyin,
                     // 现算，不存下来：存了会与 scheme / wubi 冗余、手搓配置的地方就漂移

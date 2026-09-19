@@ -110,6 +110,8 @@ impl Router {
             theme: self.config.theme,
             sentence: None,
             notice: None,
+            // 翻译评审与语音互斥：评审期间不会有语音候选
+            voice: None,
         }
     }
 }

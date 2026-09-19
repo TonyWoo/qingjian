@@ -52,6 +52,20 @@ pub(crate) fn digit_key(vk: u32) -> bool {
     (0x31..=0x39).contains(&vk)
 }
 
+/// 语音候选挂在候选窗里时归输入法的键：空格与 `1` 接受、`Esc` 丢弃。
+///
+/// 与 Server 的 `voice_choice` 是同一组键，两边要一起改。这些键平时都放行给应用
+/// （空格连 `is_edit` 都不算，见 [`would_eat`](crate::com::service::key_sink)），
+/// 只有语音这边等用户选的时候才拦。
+pub(crate) fn is_voice_choice(event: &KeyEvent) -> bool {
+    if event.modifiers.has_command_key() {
+        return false;
+    }
+    let vk = VIRTUAL_KEY(event.virtual_key as u16);
+    // `1` 既认敲出来的字符也认键位：Server 那边（`codes::digit`）是同一条规则
+    matches!(vk, VK_SPACE | VK_ESCAPE) || event.virtual_key == 0x31 || event.character == Some('1')
+}
+
 fn current_modifiers(english_mode: bool) -> KeyModifiers {
     KeyModifiers {
         ctrl: key_down(VK_CONTROL),

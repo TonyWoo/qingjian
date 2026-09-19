@@ -13,7 +13,9 @@ use super::TextService_Impl;
 use super::next::Next;
 use crate::client::KeyReply;
 use crate::com::composition::preedit_string;
-use crate::com::key::event::{digit_key, is_edit, is_letter, is_mode_letter, is_nav, to_key_event};
+use crate::com::key::event::{
+    digit_key, is_edit, is_letter, is_mode_letter, is_nav, is_voice_choice, to_key_event,
+};
 use crate::com::key::preserved;
 use crate::com::log::log;
 
@@ -80,6 +82,12 @@ impl ITfKeyEventSink_Impl for TextService_Impl {
         if self.keyboard_disabled(&pic) {
             return Ok(FALSE);
         }
+        // 语音：顺手请一次只读会话量光标位置。识别结果要在没有组句的地方弹候选窗，
+        // 而位置平时只在组句里报（`composition::report_caret`），Server 没有别处能拿到。
+        // 报得早没关系，Server 记着，等结果到了再摆窗口。
+        if guid == preserved::GUID_VOICE {
+            self.report_caret_for_voice(&pic);
+        }
         let event = preserved::key_event(combo, self.mode_state.english());
         Ok(self.forward_key(pic, event).into())
     }
@@ -106,6 +114,18 @@ impl TextService_Impl {
         to_key_event(vk, self.mode_state.english())
     }
 
+    /// 语音触发键那一下量一次光标位置（只读编辑会话，拿不到就退到鼠标处）。
+    fn report_caret_for_voice(&self, pic: &Ref<ITfContext>) {
+        let Ok(context) = pic.ok() else {
+            return;
+        };
+        if let Err(error) =
+            crate::com::edit::request_caret(context, self.client_id.get(), self.engine.clone())
+        {
+            log(&format!("请求光标位置会话失败: {error}"));
+        }
+    }
+
     fn note_key_down(&self, vk: u32, lparam: LPARAM) {
         self.shift_tap.key_down(vk, lparam);
     }
@@ -126,6 +146,11 @@ impl TextService_Impl {
     fn would_eat(&self, event: &KeyEvent) -> bool {
         // 翻译评审中所有键先吃进来交给 Server 定接受 / 取消。
         if self.shared.translating() {
+            return true;
+        }
+        // 语音候选挂着：空格 / 1 / Esc 归输入法（Server 定接受还是丢弃）。别的键一概照常 ——
+        // Server 收到就当作「用户不要这段了」，不抢用户的输入。
+        if self.shared.voice_ready() && is_voice_choice(event) {
             return true;
         }
         let modifiers = event.modifiers;
@@ -184,6 +209,9 @@ impl TextService_Impl {
                 Ok(KeyReply::Result(response)) => {
                     let preedit = preedit_string(&response.frame);
                     self.shared.set_composing(!response.frame.is_empty());
+                    // 语音状态随每一帧走：接受 / 丢弃那一下的帧里它变回 None，我们才知道可以
+                    // 不再拦空格了。`is_empty` 不看语音那一句，所以这里不会误判成在组句。
+                    self.shared.set_voice(response.frame.voice.clone());
                     // 翻译评审的任何键都结束评审（Server 侧已同步结束）。
                     self.shared.set_translating(false);
                     let consumed = matches!(response.outcome, KeyOutcome::Consumed);

@@ -33,7 +33,7 @@ pub use self::reload::attach_cloud;
 pub use self::rescore::find_model;
 use self::rescore::{ModelLoader, RescoreState};
 use self::session::SessionInfo;
-pub use self::status::{NoopStatusSink, StatusEvent, StatusSink, StatusView};
+pub use self::status::{NoopStatusSink, StatusEvent, StatusSink, StatusView, VoiceCue};
 use self::translate::Translation;
 pub use qingjian_voice::fetch::installed as find_voice_model;
 
@@ -97,8 +97,18 @@ pub struct Router {
     /// 状态条上点出来、还没被 DLL 用 `SyncMode` 取走的目标模式。
     pending_mode: Option<bool>,
 
-    /// 聚焦会话最近报来的光标矩形；云联想异步到达时按它原地重摆候选窗口。
+    /// 状态条上语音那一格上次画的内容；每个 tick 比一次，没变就不重画。
+    status_voice: VoiceCue,
+
+    /// 聚焦会话最近报来的光标矩形；云联想异步到达时按它原地重摆候选窗口。收窗口时清掉。
     last_rect: Option<ScreenRect>,
+
+    /// 最近一次报来的光标位置，**收窗口不清**。
+    ///
+    /// 语音候选要用它：识别结果是在候选窗收着的时候到的（说完话拼音早没了），
+    /// 那时 `last_rect` 已经被清空，没有这一份就只能弹在屏幕角落。DLL 每次按语音触发键
+    /// 都会重报一次（`edit/caret.rs`），所以它跟光标是同步的；切会话时跟着清。
+    caret_rect: Option<ScreenRect>,
 
     /// 上次真正显示的帧与位置：没变就不重画（组字期间的空转 Poll 很多）。
     last_shown: Option<(Frame, ScreenRect)>,
@@ -153,7 +163,9 @@ impl Router {
             status: Box::new(NoopStatusSink),
             status_mode: None,
             pending_mode: None,
+            status_voice: VoiceCue::Off,
             last_rect: None,
+            caret_rect: None,
             last_shown: None,
             model_path: None,
             code_table: None,

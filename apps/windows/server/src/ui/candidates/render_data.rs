@@ -35,6 +35,9 @@ pub(crate) struct RenderData {
     /// 屏幕提示（删候选后的「已删除…」），画在拼音行下方。
     pub(super) notice: Option<String>,
 
+    /// 语音候选：识别出来、等用户按空格接受的那一段。画成第 1 条候选。
+    pub(super) voice: Option<String>,
+
     /// 候选排布。
     pub(super) layout: LayoutMode,
 
@@ -53,6 +56,7 @@ impl RenderData {
             footer: None,
             sentence: None,
             notice: None,
+            voice: None,
             layout: LayoutMode::default(),
             theme_mode: ThemeMode::default(),
         }
@@ -79,6 +83,18 @@ impl RenderData {
             (frame.page_count > 1).then(|| format!("{}/{}", frame.page + 1, frame.page_count));
         self.sentence = frame.sentence.clone();
         self.notice = frame.notice.clone();
+        // 语音候选就一条、编号 1、就高亮它：没有拼音行、没有翻页，跟普通候选长得一样。
+        // 塞进 `rows` 而不是单开一条绘制路径，GDI 那条退路也就一起有了。
+        self.voice = frame.voice_ready().map(str::to_owned);
+        if let Some(text) = &self.voice {
+            self.rows.push(Row {
+                index: "1".to_owned(),
+                text: text.clone(),
+                annotation: Vec::new(),
+                cloud: false,
+            });
+            self.highlight = self.rows.len() - 1;
+        }
     }
 
     /// 渲染器要的帧。提示（删了什么词）在渲染器里画在拼音行右侧，与 macOS 一致。

@@ -97,11 +97,11 @@ impl Engine {
         self.voice_session.cancel();
     }
 
-    /// 取识别结果；非阻塞，壳在定时器里调。拿到就地走 [`Self::commit_voice`] 上屏，
-    /// 返回**要塞进应用的最终文本**（繁体模式下已经是繁体），没有结果返回 `None`。
+    /// 取识别结果；非阻塞，壳在定时器里调。**只取不上屏** —— 文字要给用户看过、选过才算数。
     ///
-    /// 这里不把「取结果」和「上屏」拆成两步：语音没有「要不要接受」这一步，
-    /// 拆开只会给每个壳留一次「忘了调上屏，于是学习与日志整条断掉」的机会。
+    /// 拆开是因为壳要把结果摆进候选窗让用户按空格接受或 Esc 丢弃（2026-09-19 定）。
+    /// 原来「取了就地 `commit_voice`」的写法在丢弃那条路上会留下一次没发生过的上屏：
+    /// 个人 n-gram 与输入日志都记了，用户却没要这段。
     pub fn poll_voice(&mut self) -> Option<String> {
         let transcribed = self.voice.as_ref()?.poll()?;
         if transcribed.sequence != self.voice_session.sequence() {
@@ -110,7 +110,14 @@ impl Engine {
             return None;
         }
         self.voice_session.settle();
-        let text = transcribed.text?;
-        Some(self.commit_voice(&text))
+        transcribed.text
+    }
+
+    /// 用户接受了这段语音文本：走 [`Self::commit_voice`] 上屏（学习 / 输入日志 / 最近上屏），
+    /// 返回**要塞进应用的最终文本**（繁体模式下已经是繁体）。
+    ///
+    /// 只在用户真接受时调。丢弃那条路什么都不用做 —— 结果本来就没落过地。
+    pub fn accept_voice(&mut self, text: &str) -> String {
+        self.commit_voice(text)
     }
 }

@@ -6,6 +6,7 @@ pub(crate) const BACK: u32 = 0x08;
 pub(crate) const TAB: u32 = 0x09;
 pub(crate) const RETURN: u32 = 0x0D;
 pub(crate) const ESCAPE: u32 = 0x1B;
+pub(crate) const SPACE: u32 = 0x20;
 pub(crate) const PRIOR: u32 = 0x21;
 pub(crate) const NEXT: u32 = 0x22;
 pub(crate) const END: u32 = 0x23;

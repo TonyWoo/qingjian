@@ -200,7 +200,11 @@ fn a_voice_commit_is_logged_with_the_voice_source() {
     assert!(engine.start_voice());
     feed(&mut engine, 1.0);
     assert!(engine.stop_voice());
-    assert_eq!(wait_for_text(&mut engine).unwrap(), "16000");
+    let text = wait_for_text(&mut engine).unwrap();
+    assert_eq!(text, "16000");
+    // 取到结果不等于上屏：文字要先给用户看过，接受（空格 / 数字）之后才记日志与个人 n-gram
+    assert!(entries.lock().unwrap().is_empty(), "取结果不该记日志");
+    assert_eq!(engine.accept_voice(&text), "16000");
 
     let entries = entries.lock().unwrap();
     assert_eq!(entries.len(), 1, "语音上屏只该记一条，不该顺带记 retype");
@@ -213,6 +217,29 @@ fn a_voice_commit_is_logged_with_the_voice_source() {
     assert_eq!(commit.keys, "");
     assert_eq!(commit.index, None);
     assert!(commit.top.is_empty());
+}
+
+/// 丢弃就是什么都不做：Core 侧没有对应的调用，不上屏、不记日志、不进个人 n-gram。
+/// 这是 `poll_voice` 与 `accept_voice` 拆开的原因 —— 原来「取到就上屏」在丢弃这条路上
+/// 会留下一次用户没要过的学习。
+#[test]
+fn discarding_the_result_leaves_nothing_behind() {
+    let entries = Arc::new(Mutex::new(Vec::new()));
+    let runs = Arc::new(AtomicUsize::new(0));
+    let mut engine = engine()
+        .with_input_logger(Box::new(MemoryLogger(entries.clone())))
+        .with_speech_recognizer(Box::new(FakeRecognizer { runs }));
+
+    assert!(engine.start_voice());
+    feed(&mut engine, 1.0);
+    assert!(engine.stop_voice());
+    let text = wait_for_text(&mut engine).unwrap();
+
+    assert_eq!(text, "16000");
+    assert!(
+        entries.lock().unwrap().is_empty(),
+        "丢掉的结果不该进输入日志"
+    );
 }
 
 #[test]
@@ -231,7 +258,8 @@ fn a_voice_commit_does_not_carry_the_previous_query() {
     assert!(engine.start_voice());
     feed(&mut engine, 1.0);
     assert!(engine.stop_voice());
-    wait_for_text(&mut engine);
+    let text = wait_for_text(&mut engine).unwrap();
+    engine.accept_voice(&text);
 
     let entries = entries.lock().unwrap();
     let InputLogEntry::Commit(commit) = &entries[0] else {

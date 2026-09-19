@@ -7,6 +7,7 @@ use qingjian_platform::protocol::{
 use super::Router;
 use super::key::Effect;
 use super::session::SessionInfo;
+use super::voice::VoiceChoice;
 
 impl Router {
     pub(super) fn dispatch(&mut self, message: ClientMessage) -> Option<ServerMessage> {
@@ -108,14 +109,36 @@ impl Router {
         if self.translation.is_some() {
             return self.handle_translation_review(session, &event);
         }
-        // 语音触发键：不组句时按一下开始录音、再按一下结束。与「翻译选中文字」一样在
-        // apply_key 之前拦 —— 晚一步的话 Ctrl 系组合会被 has_command_key 放行给应用。
-        // 起不来的话（没接模型、麦克风打不开、正在组句）不吃这个键，让它照常走。
-        if self.engine.composition().is_empty()
-            && self.matches_voice_combo(&event)
-            && self.toggle_voice()
-        {
+        // 语音候选摆在候选窗里：空格 / 1 接受、Esc 丢弃，敲别的键当用户不要这段、照常处理这个键。
+        // 排在触发键前面：结果还挂着时再按触发键 = 重录（走「别的键」那条路先把旧结果丢掉）。
+        if self.voice.has_pending() {
+            match self.voice_choice(&event) {
+                Some(VoiceChoice::Accept) => {
+                    let commit = self
+                        .voice
+                        .take_pending()
+                        .map(|text| self.engine.accept_voice(&text));
+                    return self.finish_voice_choice(session, commit);
+                }
+                Some(VoiceChoice::Discard) => {
+                    self.voice.discard();
+                    return self.finish_voice_choice(session, None);
+                }
+                None => {
+                    self.voice.discard();
+                    self.reconcile_voice_status();
+                }
+            }
+        }
+        // 语音触发键：按一下开始录音、再按一下结束。与「翻译选中文字」一样在 apply_key 之前拦
+        // —— 晚一步的话 Ctrl 系组合会被 has_command_key 放行给应用。
+        // **这里不能要求「没在组句」**：录着的时候用户多半正敲着拼音，那会儿按第二下必须停得下来。
+        // 真机踩过：加了这条守卫之后，`preedit` 非空时停止也一起被挡，录音一直挂在 Recording、
+        // 日志里连「录音结束」都不出现。要开始才看组句，那个判断在 `toggle_voice` 里。
+        if self.matches_voice_combo(&event) && self.toggle_voice() {
             let frame = self.current_frame();
+            // 上一次的结果刚在上面被丢掉时，候选窗还摆着，这里顺带收掉
+            self.reconcile_candidates(&frame);
             return ServerMessage::KeyResult {
                 session,
                 outcome: KeyOutcome::Consumed,
@@ -139,7 +162,7 @@ impl Router {
                 request: self.selection_seq,
             };
         }
-        let (mut commit, outcome) = match self.apply_key(&event) {
+        let (commit, outcome) = match self.apply_key(&event) {
             Effect::Changed(commit) => {
                 self.recompose();
                 (commit, KeyOutcome::Consumed)
@@ -147,25 +170,26 @@ impl Router {
             Effect::Navigated => (None, KeyOutcome::Consumed),
             Effect::Passthrough => (None, KeyOutcome::Passthrough),
         };
-        // 语音识别结果挂起时，搭这次按键的车上屏。**只有被吃掉的键带得走**：
-        // 放行且没有可打印字符的键，DLL 会把 commit 丢掉（key_sink.rs 的 `Next::Document`
-        // 分支），带上等于丢字 —— 那种键就让它继续挂着等下一个。
-        // 顺序上语音在前：话是先说的，键是后按的。
-        if matches!(outcome, KeyOutcome::Consumed)
-            && let Some(pending) = self.voice.take_pending()
-        {
-            tracing::info!(chars = pending.chars().count(), "语音文本随这次按键上屏");
-            commit = Some(match commit {
-                Some(text) => format!("{pending}{text}"),
-                None => pending,
-            });
-        }
         self.poll_prediction();
         let frame = self.current_frame();
         self.reconcile_candidates(&frame);
         ServerMessage::KeyResult {
             session,
             outcome,
+            commit,
+            frame,
+        }
+    }
+
+    /// 语音候选被选掉（接受或丢弃）之后的收尾：收起候选窗、刷新状态条、回一帧给 DLL
+    /// —— 帧上 `voice` 变回 `None`，DLL 据此停止拦空格。
+    fn finish_voice_choice(&mut self, session: SessionId, commit: Option<String>) -> ServerMessage {
+        self.hide_candidate_window();
+        let frame = self.current_frame();
+        self.reconcile_voice_status();
+        ServerMessage::KeyResult {
+            session,
+            outcome: KeyOutcome::Consumed,
             commit,
             frame,
         }

@@ -142,7 +142,15 @@ impl Router {
     }
 
     /// 按当前状态生成一帧：翻译评审优先；没在组句给空帧；否则给高亮所在的那一页。
+    /// 帧上还带一句语音状态（在认 / 等选）—— DLL 靠它决定拦不拦空格、还要不要接着轮询。
     pub(super) fn current_frame(&self) -> Frame {
+        let mut frame = self.composed_frame();
+        frame.voice = self.voice.prompt(self.engine.voice_state());
+        frame
+    }
+
+    /// 组句这一面的帧（没有语音那一句）。
+    fn composed_frame(&self) -> Frame {
         if let Some(translation) = &self.translation {
             return self.translation_frame(translation);
         }
@@ -162,6 +170,8 @@ impl Router {
                 theme: self.config.theme,
                 sentence: None,
                 notice: self.notice.clone(),
+                // 语音那一句由 `current_frame` 统一补
+                voice: None,
             },
             Some(Composed::Candidates {
                 preedit,
@@ -189,6 +199,7 @@ impl Router {
                     theme: self.config.theme,
                     sentence: self.sentence.clone(),
                     notice: self.notice.clone(),
+                    voice: None,
                 }
             }
         }

@@ -156,7 +156,8 @@ translation_second = "shift+ctrl"
 translate_selection = "ctrl+alt+t"
 # 数字键配这些修饰键删掉候选：用户词（云端选过的、自动造的）整个删掉，词库里的词清掉对它的学习记录。组句中要打感叹号先把词上屏
 delete_candidate = "shift"
-# 本地离线语音输入：按一下开始录音、再按一下结束。要先在设置里下好模型、把 [voice] enabled 打开
+# 本地离线语音输入：按一下开始录音（悬浮状态条最左一格显示「录音中」）、再按一下结束；
+# 识别出来的文字显示成候选窗里的一条，空格接受、Esc 丢弃。要先在设置里下好模型、把 [voice] enabled 打开
 voice = "shift+ctrl+v"
 "#
     };

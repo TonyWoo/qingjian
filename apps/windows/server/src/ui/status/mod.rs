@@ -1,5 +1,8 @@
-//! 悬浮状态条：桌面上常驻、可拖动的三格浮窗 `[中 / 英][，。/ ,.][⚙]`。缺省由青简渲染器画（[`super::painter`]），
+//! 悬浮状态条：桌面上常驻、可拖动的浮窗 `[语音][中 / 英][，。/ ,.][⚙]`。缺省由青简渲染器画（[`super::painter`]），
 //! `renderer = "system"` 时复用分层窗口合成器与候选窗口的 GDI 主题。
+//!
+//! 最左边那格（语音）只在录音 / 识别 / 等着上屏时出现：语音是唯一「按下去当场什么都不发生」的
+//! 输入方式，没有这一格用户会以为按键没生效。它不响应点击。
 //!
 //! 按下鼠标先 `DragDetect`：挪出拖动阈值就交给系统的移动循环（`WM_NCLBUTTONDOWN` + `HTCAPTION`），
 //! 结束时 `WM_EXITSIZEMOVE` 报新位置；没挪就是点击，按 x 落进哪格。`WM_MOUSEACTIVATE` 回 `MA_NOACTIVATE` 不抢焦点。
@@ -39,7 +42,7 @@ use super::layered::{self, Layered};
 use super::monitor;
 use super::painter::SharedPainter;
 use super::window_class::WindowClass;
-use crate::dispatch::StatusView;
+use crate::dispatch::{StatusView, VoiceCue};
 
 const CLASS_NAME: PCWSTR = w!("QingjianStatusBar");
 static CLASS: WindowClass = WindowClass::new();
@@ -74,13 +77,6 @@ pub(super) struct StatusBar {
     /// 青简渲染器；`None` 走 GDI。
     painter: SharedPainter,
 }
-
-/// 三格从左到右的动作。
-const ACTIONS: [StatusAction; 3] = [
-    StatusAction::ToggleMode,
-    StatusAction::TogglePunctuation,
-    StatusAction::OpenSettings,
-];
 
 impl StatusBar {
     /// 建一个隐藏的状态条窗口。
@@ -158,6 +154,16 @@ impl StatusBar {
         }
     }
 
+    /// 语音格的文字；`None` 表示这会儿不显示这一格。
+    fn voice_text(cue: VoiceCue) -> Option<&'static str> {
+        match cue {
+            VoiceCue::Off => None,
+            VoiceCue::Recording => Some("录音中"),
+            VoiceCue::Transcribing => Some("识别中"),
+            VoiceCue::Ready => Some("空格上屏"),
+        }
+    }
+
     /// 模式格的文字：中 / 英 / 注，开着双拼时跟方案名。
     fn mode_text(view: &StatusView) -> String {
         if view.english {
@@ -172,23 +178,44 @@ impl StatusBar {
         }
     }
 
-    /// 渲染器要的三格：模式（品牌色）、标点（生效时品牌色，否则灰）、齿轮。
-    fn status_cells(view: &StatusView) -> Vec<StatusCell> {
-        vec![
-            StatusCell::text(Self::mode_text(view), true),
-            StatusCell::text(if view.full_width { "，。" } else { ",." }, view.full_width),
-            StatusCell::Gear,
-        ]
+    /// 渲染器要的格（从左到右）与各格点下去做什么：语音（有语音状态时才出现）、
+    /// 模式（品牌色）、标点（生效时品牌色，否则灰）、齿轮。
+    fn status_cells(view: &StatusView) -> (Vec<StatusCell>, Vec<StatusAction>) {
+        let mut cells = Vec::new();
+        let mut actions = Vec::new();
+        if let Some(text) = Self::voice_text(view.voice) {
+            cells.push(StatusCell::text(text, true));
+            actions.push(StatusAction::None);
+        }
+        cells.push(StatusCell::text(Self::mode_text(view), true));
+        actions.push(StatusAction::ToggleMode);
+        cells.push(StatusCell::text(
+            if view.full_width { "，。" } else { ",." },
+            view.full_width,
+        ));
+        actions.push(StatusAction::TogglePunctuation);
+        cells.push(StatusCell::Gear);
+        actions.push(StatusAction::OpenSettings);
+        (cells, actions)
     }
 
-    /// GDI 画法的三格，顺序同 [`ACTIONS`]。
+    /// GDI 画法的同一组格与动作，顺序同 [`Self::status_cells`]。
     fn cells(&self, theme: &Theme) -> Vec<CellSpec> {
         let data = self.data.borrow();
         let Some(view) = data.as_ref() else {
             return Vec::new();
         };
         let punctuation_active = view.full_width;
-        vec![
+        let mut specs = Vec::new();
+        if let Some(text) = Self::voice_text(view.voice) {
+            specs.push(CellSpec {
+                text: text.to_owned(),
+                font: theme.text_font,
+                color: theme.cloud_color,
+                action: StatusAction::None,
+            });
+        }
+        specs.extend([
             CellSpec {
                 text: Self::mode_text(view),
                 font: theme.text_font,
@@ -211,20 +238,26 @@ impl StatusBar {
                 color: theme.gloss_color,
                 action: StatusAction::OpenSettings,
             },
-        ]
+        ]);
+        specs
     }
 
     /// 画好贴上并显示；顺带记下各格边界给点击用。渲染器画不成就走 GDI。
     fn render(&self) {
-        let rendered = {
+        // 格与动作先一起取出来：贴上去时要按同样的顺序记各格边界，给点击分格用
+        let (cells, actions) = {
             let data = self.data.borrow();
+            match data.as_ref() {
+                Some(view) => Self::status_cells(view),
+                None => (Vec::new(), Vec::new()),
+            }
+        };
+        let rendered = {
             let mut painter = self.painter.borrow_mut();
-            match (data.as_ref(), painter.as_mut()) {
-                (Some(view), Some(painter)) => painter.render_status(
-                    &Self::status_cells(view),
-                    self.dark.get(),
-                    self.dpi.get(),
-                ),
+            match painter.as_mut() {
+                Some(painter) if !cells.is_empty() => {
+                    painter.render_status(&cells, self.dark.get(), self.dpi.get())
+                }
                 _ => None,
             }
         };
@@ -241,7 +274,7 @@ impl StatusBar {
                 *self.placement.cells.borrow_mut() = rendered
                     .cell_edges
                     .iter()
-                    .zip(ACTIONS)
+                    .zip(actions)
                     .map(|(edge, action)| (edge.round() as i32, action))
                     .collect();
                 let anchor = self.anchor(content, margin);

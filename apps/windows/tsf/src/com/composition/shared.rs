@@ -3,6 +3,8 @@ use std::rc::Rc;
 
 use windows::Win32::UI::TextServices::{ITfComposition, ITfContext};
 
+use qingjian_platform::protocol::VoicePrompt;
+
 use crate::com::service::SharedClient;
 
 /// `TextService`、编辑会话、组句 sink、轮询定时器之间共享的组句状态（STA 单线程，`Rc` 传递）。
@@ -25,6 +27,12 @@ pub(crate) struct Shared {
     /// 本线程当前有键盘焦点（`OnSetFocus`）；轮询定时器只在前台时问状态条的切模式请求。
     foreground: Cell<bool>,
 
+    /// 语音这边在等什么（在认 / 等用户选），随每一帧从 Server 同步过来。
+    ///
+    /// 必须本地存一份：Server 攒着识别结果等用户选，而**空格本来不经我们转发**
+    /// （`would_eat` 放行给应用），不知情就拦不住，那一下空格会被应用吃掉、语音白说。
+    voice: RefCell<Option<VoicePrompt>>,
+
     /// 与 `TextService` 共用的引擎客户端；DLL 侧结束组句时要通知 Server 收候选窗口（它无从知晓）。
     client: SharedClient,
 }
@@ -38,8 +46,40 @@ impl Shared {
             last_context: RefCell::new(None),
             server_stale: Cell::new(false),
             foreground: Cell::new(false),
+            voice: RefCell::new(None),
             client,
         })
+    }
+
+    /// 语音候选正等着用户选（Server 认好了、文字摆在候选窗里）。
+    pub(crate) fn voice_ready(&self) -> bool {
+        matches!(&*self.voice.borrow(), Some(VoicePrompt::Ready { .. }))
+    }
+
+    /// 语音这边有状态（在认或在等选）：轮询定时器据此每拍拉一次 Server。
+    pub(crate) fn voice_pending(&self) -> bool {
+        self.voice.borrow().is_some()
+    }
+
+    /// 按 Server 回的帧同步语音状态。**每一帧都要过一遍**（按键回帧与轮询回帧都是），
+    /// 否则会卡在「以为还挂着」里，一直拦空格。
+    pub(crate) fn set_voice(&self, prompt: Option<VoicePrompt>) {
+        let mut voice = self.voice.borrow_mut();
+        let changed = *voice != prompt;
+        *voice = prompt;
+        drop(voice);
+        if changed {
+            // 只记状态变化：轮询每 80 ms 一次，逐帧打日志会把日志刷满
+            crate::com::log::log(&format!(
+                "语音状态 {}",
+                match &*self.voice.borrow() {
+                    None => "空闲".to_owned(),
+                    Some(VoicePrompt::Transcribing) => "识别中".to_owned(),
+                    Some(VoicePrompt::Ready { text }) =>
+                        format!("待选 {} 字", text.chars().count()),
+                }
+            ));
+        }
     }
 
     pub(crate) fn foreground(&self) -> bool {
@@ -105,9 +145,11 @@ impl Shared {
     }
 
     /// 组句结束（应用终止组句 / 断线 / 失焦上屏）：不再当作在组句，并让 Server 收候选窗口。
+    /// 语音状态一并清掉 —— 这几个场合下那段待选的结果都不再属于当前文档了，留着只会一直拦空格。
     pub(crate) fn end_composing(&self) {
         self.composing.set(false);
         self.translating.set(false);
+        self.set_voice(None);
         self.hide_candidates();
     }
 

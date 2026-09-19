@@ -108,10 +108,12 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
     unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
 }
 
-/// 组句中或翻译评审中拉云结果；否则前台时隔几拍问一次切模式。引擎正被按键处理借用时跳过这一拍；连接坏了断开。
+/// 组句中、翻译评审中或语音挂着时拉 Server；否则前台时隔几拍问一次切模式。
+/// 引擎正被按键处理借用时跳过这一拍；连接坏了断开。
 fn poll_once(context: &PollContext) {
     let translating = context.shared.translating();
-    if !context.shared.composing() && !translating {
+    let voice = context.shared.voice_pending();
+    if !context.shared.composing() && !translating && !voice {
         let tick = context.ticks.get().wrapping_add(1);
         context.ticks.set(tick);
         if context.shared.foreground() && tick.is_multiple_of(MODE_SYNC_EVERY) {
@@ -127,6 +129,9 @@ fn poll_once(context: &PollContext) {
     };
     match client.poll() {
         Ok(frame) => {
+            // 语音状态跟着每一拍同步：识别一好（几千毫秒的事）就得能拦空格，
+            // 等下一次按键才更新的话，用户看见候选窗到按空格之间那一下会漏给应用。
+            context.shared.set_voice(frame.voice.clone());
             // 翻译评审时回空帧 = 翻译已在 Server 侧结束（云端没给译文）。
             if translating && frame.is_empty() {
                 drop(guard);

@@ -124,6 +124,7 @@
   Whisper 的代码与权重都是 MIT，可自由再分发。实测它**自带标点与大小写**（原先以为它没有、不如 SenseVoice，是错的），逐字准确率也好。
   **产品定位为「短句输入」**（2026-09-19）：Whisper 在 CPU 上 RTF 约 0.25，说 10 秒要等约 2.5 秒；不做 VAD 分段边说边上屏，保持整段一次出结果。
   **模型不进安装包**（几百 MB），改成设置里可选下载：清单 `voice.lock` + `qingjian-voice::fetch` + CLI `--voice-fetch` 已就位。
+  **Windows 侧已接完**（2026-09-19）：Server 采集（cpal）、触发键（`[shortcut] voice`，走 TSF 保留键 —— 带修饰键的组合不经击键 sink）、
+  状态条最左边的语音格、设置页开关与模型下载、安装器与发布脚本；**真机联调进行中**。
   **待办**：`tools/release/pack-voice.sh` 与 `voice.lock` 的真实值（依赖上面两个 Whisper 整包）、用真实音频集测 CER 与 RTF 定两档模型、
-  麦克风采集（cpal）与触发键、Windows 设置页 + **Server 重扫模型目录**（`find_model` 只在启动扫一次）、macOS 偏好设置页、
-  许可与署名（`assets/voice/README.md` + 「关于」页）
+  macOS 偏好设置页、许可与署名（`assets/voice/README.md` + 「关于」页）、用户文档（`docs/user/` 的语音输入页与 `keys.md` 里的触发键）

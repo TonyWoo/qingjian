@@ -48,7 +48,8 @@ pub fn run_wav(engine: &mut Engine, path: &Path) -> Result<String, CliError> {
         writeln!(out, "录音短于 0.3 s，没有送去识别").ok();
         return Ok(out);
     }
-    let text = wait(engine)?;
+    // 走一遍完整链路（含上屏：学习 / 输入日志），单文件这条就是拿来验这个的
+    let text = wait(engine)?.map(|text| engine.accept_voice(&text));
     let elapsed = started.elapsed();
 
     writeln!(
@@ -84,6 +85,8 @@ pub fn run_eval(engine: &mut Engine, dirs: &[PathBuf], misses: usize) -> Result<
             engine.push_voice_samples(&samples);
             let started = Instant::now();
             let recognized = engine.stop_voice();
+            // 只取不上屏：`accept_voice` 会记输入日志与个人 n-gram，拿评测集跑一遍等于把这些
+            // 音频的文本学进用户词典，CER 也不该受这条路影响
             let hypothesis = if recognized { wait(engine)? } else { None };
             let millis = started.elapsed().as_millis();
 

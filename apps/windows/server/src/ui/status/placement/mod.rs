@@ -67,7 +67,7 @@ impl Placement {
                 (self.events)(StatusEvent::TogglePunctuation);
             }
             Some(StatusAction::OpenSettings) => open_settings(),
-            None => {}
+            Some(StatusAction::None) | None => {}
         }
     }
 }

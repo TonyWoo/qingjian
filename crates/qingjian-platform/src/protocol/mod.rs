@@ -20,14 +20,14 @@ mod session;
 /// **加枚举变体不在「仍能对话」之列**：`qingjian_core::Candidate` 是线上格式的一部分（见本模块文档），
 /// 给它加一个 `kind` 变体，老 DLL 解不出来会整条帧失败、按键直接放行——测试时看到的「输入法突然只出英文」
 /// 就是这么来的（`unknown variant `Code``）。加变体必须同时 +1 并重装 DLL，否则连警告都不会有。
-pub const PROTOCOL_VERSION: u32 = 5;
+pub const PROTOCOL_VERSION: u32 = 6;
 
 pub mod frame;
 pub mod key;
 
 pub use client::ClientMessage;
 pub use codec::{CodecError, DEFAULT_PIPE_NAME, read_message, write_message};
-pub use frame::{Frame, PreeditKind, PreeditSegment};
+pub use frame::{Frame, PreeditKind, PreeditSegment, VoicePrompt};
 pub use key::{KeyEvent, KeyModifiers, KeyOutcome};
 pub use screen_rect::ScreenRect;
 pub use server::ServerMessage;

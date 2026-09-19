@@ -1,11 +1,29 @@
 //! 候选窗口的定位锚点：组句范围 / 选区在屏幕上的矩形，拿不到时退到鼠标位置。
 
+use std::mem::ManuallyDrop;
+
 use windows::Win32::Foundation::{POINT, RECT};
-use windows::Win32::UI::TextServices::{ITfContext, ITfRange};
+use windows::Win32::UI::TextServices::{ITfContext, ITfRange, TF_DEFAULT_SELECTION, TF_SELECTION};
 use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 use windows::core::BOOL;
 
 use qingjian_platform::protocol::ScreenRect;
+
+/// 当前选区（光标就是空选区）。读选区与量光标位置都要，所以放在这里共用。
+pub(crate) fn selection_range(context: &ITfContext, ec: u32) -> Option<ITfRange> {
+    let mut selection = [TF_SELECTION::default()];
+    let mut fetched = 0u32;
+    unsafe {
+        context
+            .GetSelection(ec, TF_DEFAULT_SELECTION, &mut selection, &mut fetched)
+            .ok()?;
+    }
+    if fetched == 0 {
+        return None;
+    }
+    // GetSelection 移交 range 的所有权（ManuallyDrop），取出后由调用方释放。
+    unsafe { ManuallyDrop::take(&mut selection[0].range) }
+}
 
 /// `range` 的屏幕矩形，拿不到（有些应用给全零 / 空矩形）退到鼠标处。
 pub(crate) fn anchor_rect(context: &ITfContext, ec: u32, range: &ITfRange) -> ScreenRect {

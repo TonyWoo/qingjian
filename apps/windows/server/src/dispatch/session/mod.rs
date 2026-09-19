@@ -72,6 +72,10 @@ impl Router {
         self.notice = None;
         self.highlight = 0;
         self.navigated = false;
+        // 待选的语音结果跟着组句一起作废：它属于刚才那个文档，候选窗口都收了，
+        // 留着的话用户在新应用里按个空格，那段文字就落到新应用里去了
+        self.voice.discard();
+        self.caret_rect = None;
         self.hide_candidate_window();
     }
 }

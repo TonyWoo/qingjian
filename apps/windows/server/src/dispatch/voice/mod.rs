@@ -1,22 +1,21 @@
-//! 语音输入：找模型、接识别器、开麦克风、把识别结果攒成待上屏的文本。
+//! 语音输入：找模型、接识别器、开麦克风、把识别结果攒成待选的候选。
 //!
-//! **上屏方式走「挂在下一个按键上」**：DLL 的按键路径本来就处理 `KeyResult.commit`
-//! （`key_sink.rs` 收到就插进文档），所以 Server 只要把识别结果攒下来、等下一次被吃掉的
-//! 按键捎过去就行 —— 不用改 IPC 协议、DLL 一行都不用动。
+//! **上屏方式走「候选窗里选一条」**（2026-09-19 定，改掉了原先的「挂在下一个按键上」）：
+//! 识别好了 Server 把文字画成候选窗里的第 1 条（帧上的 [`VoicePrompt`]，见 `dispatch/composed`），
+//! 用户按空格 / `1` 接受、`Esc` 丢弃 —— 只有 DLL 能把键转进来，所以帧上要带语音状态，
+//! DLL 才知道该拦空格（`Frame::is_empty` 把语音算作空，它不会误判成在组句）。
 //!
-//! 代价是**松手后要再按一下键文字才落**。之所以不接受「立刻上屏」：那要给 poll 加一条上屏
-//! 通道（改协议 + 升版本），而且 DLL 录音期间根本不在轮询（`poll_once` 的守卫是「在组句或
-//! 翻译评审中」），插字还得在非按键时机申请编辑会话 —— 三处联动，风险全压在真机上。
-//! 短句输入这个场景下，说完顺手按一下空格本来就常见，先要正确再要快。
-//!
-//! 还有一条硬约束：**放行的功能键会把 commit 丢掉**（`key_sink.rs` 里 `consumed: false`
-//! 且没有可打印字符的分支直接 `false`）。所以待上屏的文本只能交给「被吃掉」的按键。
+//! 为什么不直接上屏：Server 没有通道能主动往文档里写字，只有 DLL 在按键路径上能写
+//! （`key_sink.rs` 收到 `KeyResult.commit` 就插进文档）。要在识别一完成就落字，得给 poll 加一条
+//! 上屏通道 + 让 DLL 在非按键时机申请编辑会话插字 —— 那两处联动风险全压在真机上，
+//! 而且用户看不见识别成了什么、也没法反悔。多按一下空格换「看得见、能反悔」，值。
 
 mod router;
 
 use std::path::Path;
 
-use qingjian_core::Engine;
+use qingjian_core::{Engine, VoiceState};
+use qingjian_platform::protocol::VoicePrompt;
 use qingjian_voice::BackendConfig;
 
 /// 语音输入的运行时。
@@ -29,19 +28,45 @@ pub struct Voice {
     /// 试过开麦克风但失败了：只记一次日志，之后不再重试（免得每次按键都报一遍）。
     failed: bool,
 
-    /// 识别好、等着搭下一次按键上屏的文本。
+    /// 识别好、摆在候选窗里等用户选的文本。
     pending: Option<String>,
 }
 
+/// 用户在语音候选上按的那一下。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum VoiceChoice {
+    /// 接受：这一段上屏。
+    Accept,
+
+    /// 丢弃（`Esc`）：不上屏，也不学习。
+    Discard,
+}
+
 impl Voice {
-    /// 识别结果挂起中，还没有按键把它捎走。
+    /// 识别结果还挂着，等用户选。
     pub fn has_pending(&self) -> bool {
         self.pending.is_some()
     }
 
-    /// 取走待上屏的文本。
+    /// 取走待选的文本（接受那一下用；取走之前先 [`Engine::accept_voice`] 才走上屏）。
     pub fn take_pending(&mut self) -> Option<String> {
         self.pending.take()
+    }
+
+    /// 丢掉待选的文本（`Esc`、敲了别的键、切走会话）。
+    pub fn discard(&mut self) {
+        if self.pending.take().is_some() {
+            tracing::info!("语音结果被丢弃");
+        }
+    }
+
+    /// 帧上要带的语音状态：在认 / 等选。两个都不是返回 `None`。
+    pub fn prompt(&self, state: VoiceState) -> Option<VoicePrompt> {
+        match &self.pending {
+            Some(text) => Some(VoicePrompt::Ready { text: text.clone() }),
+            None if state == VoiceState::Transcribing => Some(VoicePrompt::Transcribing),
+            None => None,
+        }
     }
 
     /// 麦克风就绪了没有（第一次用到时才开）。
@@ -118,7 +143,7 @@ impl Voice {
         0.0
     }
 
-    /// 取识别结果。到了就攒着等下一次按键，返回是否刚拿到。
+    /// 取识别结果。到了就摆着等用户选，返回是否刚拿到。
     pub fn poll(&mut self, engine: &mut Engine) -> bool {
         let Some(text) = engine.poll_voice() else {
             return false;
@@ -127,7 +152,7 @@ impl Voice {
         true
     }
 
-    /// 丢掉正在录的、在认的与待上屏的（进私密输入、切会话、关掉开关时调）。
+    /// 丢掉正在录的、在认的与待选的（进私密输入、切会话、关掉开关时调）。
     pub fn cancel(&mut self, engine: &mut Engine) {
         self.stop();
         engine.cancel_voice();
