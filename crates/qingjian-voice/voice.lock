@@ -1,0 +1,11 @@
+# 语音模型的下载清单：档位 → 文件列表。由 tools/release/pack-voice.sh 生成，不要手改。
+#
+# 运行时按这里逐个下载并校验 SHA256，全部成功才落盘（见 src/fetch/）。这份文件用
+# include_str! 编进二进制，所以改了它要重新编译；这样设置界面不需要去磁盘上找清单。
+#
+# url 指向项目的不可变预发布 tag（`voice-vN`），与产品数据的 `data-vN` 分开 ——
+# 词库与语言模型更新时不该让语音模型的地址跟着变。
+#
+# 待填：档位与文件要等 tools/release/pack-voice.sh 从上游 Whisper 包里挑出 int8 文件、
+# 重新托管之后才能确定（连同体积一起）。档位具体是哪两个模型由 apps/cli 的 CER / RTF
+# 实测决定，见 docs/design/voice-input.md。

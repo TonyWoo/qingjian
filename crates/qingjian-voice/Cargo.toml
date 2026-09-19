@@ -1,0 +1,38 @@
+[package]
+name = "qingjian-voice"
+description = "本地离线语音识别：sherpa-onnx 后端与音频读入"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# sherpa-onnx 后端（真正的识别）。默认关：sherpa-onnx-sys 的 build.rs 按目标三元组从 GitHub
+# 下预编译静态库，官方没有 windows-gnu 包，开着会让 `cargo check --target x86_64-pc-windows-gnu`
+# 直接构建失败（build script 在 check 下照样跑）。
+# 没编译时 `load_recognizer` 返回 `VoiceError::BackendNotCompiled`，调用方一行 cfg 都不用写。
+sherpa = ["dep:sherpa-onnx"]
+# 麦克风采集。默认关：cpal 在 Linux 上拉 alsa-sys，需要 libasound2-dev，
+# 开着会让没装音频开发包的机器与 CI 编不过。
+# 带上 `sherpa`：重采样用 sherpa-onnx 自带的 `LinearResampler`（它自己的麦克风示例就用它），
+# 省掉 rubato 那一串（rubato 5.0 要引入 audioadapter 一整套 trait）。采集没有识别器本来也没用。
+capture = ["dep:cpal", "sherpa"]
+
+[dependencies]
+qingjian-core.workspace = true
+hound.workspace = true
+serde.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+tracing.workspace = true
+# 下载模型用。reqwest 在 workspace 里是 `default-features = false`，这里补上 TLS 后端
+# （跟云联想保持一致用 native-tls）；分块读响应用 `Response::chunk()`，不需要 `stream` feature。
+reqwest = { workspace = true, features = ["native-tls"] }
+tokio = { workspace = true, features = ["net"] }
+sherpa-onnx = { workspace = true, optional = true }
+cpal = { workspace = true, optional = true }

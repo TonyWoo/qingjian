@@ -11,6 +11,7 @@ members = [
     "crates/qingjian-format",
     "crates/qingjian-neural",
     "crates/qingjian-render",
+    "crates/qingjian-voice",
     "apps/cli", "apps/macos", "apps/windows/server", "apps/windows/tsf", "apps/windows/settings", "tools/dict-convert", "tools/gloss-gen",
 ]
 
@@ -35,6 +36,7 @@ qingjian-lm = { path = "crates/qingjian-lm" }
 qingjian-format = { path = "crates/qingjian-format" }
 qingjian-neural = { path = "crates/qingjian-neural" }
 qingjian-render = { path = "crates/qingjian-render" }
+qingjian-voice = { path = "crates/qingjian-voice" }
 
 # 外部依赖统一在这里定版本，子 crate 一律 `xxx.workspace = true`
 serde = { version = "1.0.229", features = ["derive"] }
@@ -67,6 +69,19 @@ async-openai = { version = "0.42.0", default-features = false, features = ["chat
 reqwest = { version = "0.13", default-features = false }
 uuid = { version = "1.26", features = ["v4"] }
 tokio = { version = "1.53.1", features = ["rt", "time"] }
+
+# 本地离线语音识别（sherpa-onnx 官方 Rust 绑定）。只在 `qingjian-voice` 的 `sherpa` feature 下编译：
+# 它的 sherpa-onnx-sys 会按目标三元组从 GitHub 下预编译静态库，官方没有 windows-gnu 包，
+# 默认打开会让本仓库习惯的 `cargo check --target x86_64-pc-windows-gnu` 构建失败。
+sherpa-onnx = "1.13.8"
+# WAV 读取（纯 Rust）
+hound = "3.5.1"
+# 下载语音模型时校验 SHA256（纯 Rust）
+sha2 = "0.10"
+# 麦克风采集（只在 qingjian-voice 的 capture feature 下编译）。
+# cpal 在 macOS 走 CoreAudio、Windows 走 WASAPI，代码里不需要平台分支；
+# Linux 上它会拉 alsa-sys，需要 libasound2-dev，所以默认关。重采样用 sherpa-onnx 自带的。
+cpal = "0.18"
 
 # 自绘渲染器：CPU 栅格 + 文字整形/回退/栅格（fontdb / rustybuzz / swash）
 tiny-skia = "0.12.0"

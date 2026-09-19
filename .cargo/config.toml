@@ -6,3 +6,17 @@ rustflags = ["-C", "target-feature=+crt-static"]
 
 [target.i686-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static"]
+
+# 本地语音识别（crates/qingjian-voice）的原生库。sherpa-onnx-sys 的 build.rs 默认按目标三元组
+# 从 GitHub Releases 下预编译静态库 —— Windows x64 那份 123 MB，很慢且会中途失败重试，
+# 所以指向本机预先下好的归档目录，不联网。
+#
+# 这个目录不在仓库里（`/data` 已 gitignore）。**只有在开 `sherpa` feature 时才用得到**
+# （`cargo build -p qingjian-voice --features sherpa`、`qingjian-cli --features voice`），
+# 默认构建根本不编译 sherpa-onnx-sys，碰不到这里。
+#
+# 没放归档就开 feature 会构建失败，报错会直接写出它期望的完整路径 —— 照那个路径下一个放进去即可：
+# https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-win-x64-static-MT-Release-lib.tar.bz2
+# 文件名要一字不差，大小 123206268 字节。不想放、宁可让它联网下，删掉下面这行就行。
+[env]
+SHERPA_ONNX_ARCHIVE_DIR = { value = "data/sherpa-onnx", relative = true }
