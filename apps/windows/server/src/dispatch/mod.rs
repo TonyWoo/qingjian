@@ -35,7 +35,7 @@ use self::rescore::{ModelLoader, RescoreState};
 use self::session::SessionInfo;
 pub use self::status::{NoopStatusSink, StatusEvent, StatusSink, StatusView};
 use self::translate::Translation;
-pub use self::voice::find_model as find_voice_model;
+pub use qingjian_voice::fetch::installed as find_voice_model;
 
 /// 学习数据落盘间隔（与 macOS 壳一致）；Server 没有定时器，借消息节拍看时间。
 const LEARNING_FLUSH_INTERVAL: Duration = Duration::from_secs(60);

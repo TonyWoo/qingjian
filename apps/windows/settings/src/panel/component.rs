@@ -8,7 +8,8 @@ use windows_reactor::*;
 
 use super::cloud_status::CloudStatus;
 use super::controls::{export_logs, log_dir, open_in_editor, open_with_explorer};
-use super::pages::{about, cloud, dictionaries, general, shortcut};
+use super::pages::{about, cloud, dictionaries, general, shortcut, voice};
+use super::voice_status::VoiceStatus;
 use super::{Message, Settings};
 
 impl Component for Settings {
@@ -19,7 +20,7 @@ impl Component for Settings {
         let path = Self::config_path();
         Self::ensure_config_file(&path);
         let config = Config::load(&path).unwrap_or_default();
-        Self {
+        let mut settings = Self {
             config,
             path,
             page: "general".to_string(),
@@ -27,7 +28,11 @@ impl Component for Settings {
             dictionary_status: String::new(),
             families: qingjian_render::system_fonts::families(),
             font_query: None,
-        }
+            voice_status: VoiceStatus::Idle,
+            voice_model: None,
+        };
+        settings.refresh_voice_model();
+        settings
     }
 
     fn update(&mut self, message: Message, context: &ComponentContext<Self>) {
@@ -131,6 +136,45 @@ impl Component for Settings {
                 self.cloud_status = match result {
                     Ok(message) => CloudStatus::Ok(message),
                     Err(message) => CloudStatus::Failed(message),
+                };
+            }
+
+            // 语音页
+            Message::VoiceEnabled(on) => {
+                self.save("voice", "enabled", on);
+                self.refresh_voice_model();
+            }
+            Message::VoiceDownload(name) => {
+                if matches!(self.voice_status, VoiceStatus::Downloading(_)) {
+                    return;
+                }
+                let Some(tier) = qingjian_voice::fetch::tier(&name) else {
+                    self.voice_status = VoiceStatus::Failed(format!("没有 {name} 这一档模型"));
+                    return;
+                };
+                let dir = self.data_dir().join("voice").join(&name);
+                self.voice_status = VoiceStatus::Downloading(name);
+                let tier = tier.clone();
+                context.spawn_background(move |cancel| {
+                    Message::VoiceDownloadDone(voice::run_download(tier, dir, &cancel))
+                });
+            }
+            Message::VoiceDownloadDone(result) => {
+                let tier = match &self.voice_status {
+                    VoiceStatus::Downloading(name) => name.clone(),
+                    _ => String::new(),
+                };
+                self.voice_status = match result {
+                    Ok(message) => {
+                        // 记下用的是哪一档，顺便当成给 Server 的信号：它每秒看 config.toml 的
+                        // mtime，这里写一次就会触发它重扫模型目录（模型是我们这个进程下的）。
+                        if !tier.is_empty() {
+                            self.save("voice", "tier", tier);
+                        }
+                        self.save("voice", "enabled", true);
+                        VoiceStatus::Ok(message)
+                    }
+                    Err(message) => VoiceStatus::Failed(message),
                 };
             }
 
@@ -258,6 +302,7 @@ impl Component for Settings {
             item("fuzzy", "模糊音", Symbol::Audio),
             item("dictionaries", "词库", Symbol::Library),
             item("usage", "统计", Symbol::List),
+            item("voice", "语音", Symbol::Microphone),
             item("advanced", "高级", Symbol::Repair),
             item("about", "关于", Symbol::Help),
         ];

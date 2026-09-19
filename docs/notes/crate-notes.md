@@ -227,6 +227,11 @@ TSF 原有数字 / OEM 标点 / 空格键码按当前布局用 `ToUnicodeEx` 解
 （`poll_once` 的守卫是「在组句或翻译评审中」），插字还得在非按键时机申请编辑会话 —— 三处联动、风险全压在真机上。
 硬约束：**放行的功能键会把 commit 丢掉**（`key_sink.rs` 里 `consumed: false` 且无打印字符的分支直接 `false`），所以只有 Consumed 的键带得走。
 
+设置程序的「语音」页（`settings/src/panel/pages/voice.rs`）管开关与模型下载：开关写 `[voice] enabled`，下载走 `spawn_background` 跑 `qingjian_voice::fetch::Download`，
+下到用户数据目录 `voice/<档位>`；**下完写一次 `[voice] tier` 与 `enabled = true`** —— 那既是记录，也是给 Server 的信号（它每秒看 config.toml 的 mtime，靠这次写入触发重扫模型目录）。
+**没有实时百分比**：组件只有收到消息才重绘，而后台闭包要求 `Send`、拿不到 `LocalSender`（内部是 `Rc`），中途报不了进度；用不定式进度条 + 体积说明代替。
+动态行用 `StackPanel::keyed_children(Vec<KeyedView>)`（`children` 只收定长数组与元组，不收 `Vec`）。
+
 词库导入（设置「词库」页）走 `qingjian-dictionary::import` 转成 `.qj`（空词库拒绝），多选批量、成功的从 `[dictionaries] disabled` 摘掉、页面显示每个文件的结果；
 Server 每次轮询比对用户 `dicts\` 的路径 / mtime / 长度快照，配置没变也重载新增、同名更新与移除；配置解析失败时词库沿用上次有效的开关（#36）。
 

@@ -41,6 +41,12 @@ pub(crate) enum Message {
     TestConnection,
     CloudTestDone(Result<String, String>),
 
+    // 语音页
+    VoiceEnabled(bool),
+    /// 下一档模型（带档位名）。
+    VoiceDownload(String),
+    VoiceDownloadDone(Result<String, String>),
+
     // 快捷键页
     PageKeys(Option<usize>),
     ModeExpression(Option<usize>),

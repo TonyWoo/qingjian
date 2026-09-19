@@ -3264,6 +3264,7 @@ dependencies = [
  "qingjian-predict",
  "qingjian-render",
  "qingjian-translate",
+ "qingjian-voice",
  "rfd",
  "toml_edit",
  "windows-reactor",

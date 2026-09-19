@@ -14,7 +14,7 @@
 
 mod router;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use qingjian_core::Engine;
 use qingjian_voice::BackendConfig;
@@ -137,45 +137,6 @@ impl Voice {
     }
 }
 
-/// 模型目录：先看用户数据目录 `voice/<档位>`，再退到随包（或开发布局）的 `data/voice/<档位>`。
-///
-/// 档位名留空时：先用 `voice.lock` 里的第一档，再退到「`voice/` 下第一个装了模型的子目录」——
-/// 后者是给开发期用的（手动解压一个模型进去就能跑，不必先发布资产）。
-pub fn find_model(user_dir: Option<&Path>, bundled_root: &Path, tier: &str) -> Option<PathBuf> {
-    let roots = [
-        user_dir.map(|dir| dir.join("voice")),
-        Some(bundled_root.join("data/voice")),
-    ];
-    for root in roots.into_iter().flatten() {
-        if !tier.is_empty() {
-            let dir = root.join(tier);
-            if looks_like_model(&dir) {
-                return Some(dir);
-            }
-            continue;
-        }
-        if let Some(name) = qingjian_voice::fetch::tiers().map(|(name, _)| name).next() {
-            let dir = root.join(name);
-            if looks_like_model(&dir) {
-                return Some(dir);
-            }
-        }
-        // 清单还是空的（资产没发布）时，认目录里第一个像模型的
-        let mut entries: Vec<PathBuf> = std::fs::read_dir(&root)
-            .into_iter()
-            .flatten()
-            .filter_map(|entry| entry.ok())
-            .map(|entry| entry.path())
-            .filter(|path| looks_like_model(path))
-            .collect();
-        entries.sort();
-        if let Some(dir) = entries.into_iter().next() {
-            return Some(dir);
-        }
-    }
-    None
-}
-
 /// 按模型目录造识别器并接到引擎上。加载失败只记日志、不接。
 pub fn attach(engine: &mut Engine, model_dir: &Path, threads: i32) -> bool {
     let config = BackendConfig {
@@ -200,53 +161,20 @@ pub fn detach(engine: &mut Engine) {
     engine.set_speech_recognizer(None);
 }
 
-/// 一个目录像不像模型：里面至少有一个 `.onnx`。
-fn looks_like_model(dir: &Path) -> bool {
-    std::fs::read_dir(dir)
-        .into_iter()
-        .flatten()
-        .filter_map(|entry| entry.ok())
-        .any(|entry| {
-            entry
-                .file_name()
-                .to_str()
-                .is_some_and(|name| name.ends_with(".onnx"))
-        })
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
-    fn finds_the_model_by_tier_and_falls_back_to_scanning() {
-        let root = std::env::temp_dir().join(format!("qingjian-voice-find-{}", std::process::id()));
+    fn model_lookup_comes_from_the_shared_helper() {
+        // 真正的用例在 qingjian-voice 的 fetch 里（Server 与设置界面共用那一份）
+        let root = std::env::temp_dir().join(format!("qingjian-voice-srv-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let tier = root.join("voice/base");
         std::fs::create_dir_all(&tier).unwrap();
         std::fs::write(tier.join("base-encoder.int8.onnx"), b"x").unwrap();
-        // 随包目录指到同一个根：那里的 `data/voice` 不存在，不会替我们把结果兜住
-        let bundled = root.clone();
-
         assert_eq!(
-            find_model(Some(&root), &bundled, "base"),
-            Some(tier.clone()),
-            "给了档位就按档位找"
+            qingjian_voice::fetch::installed(Some(&root), &root, "base"),
+            Some(tier)
         );
-        assert_eq!(
-            find_model(Some(&root), &bundled, ""),
-            Some(tier.clone()),
-            "档位留空、清单也还是空的时候，认目录里第一个像模型的"
-        );
-        assert_eq!(
-            find_model(Some(&root), &bundled, "small"),
-            None,
-            "档位对不上就是没找到"
-        );
-        // 空目录不算模型
-        std::fs::remove_file(tier.join("base-encoder.int8.onnx")).unwrap();
-        assert_eq!(find_model(Some(&root), &bundled, "base"), None);
-
         let _ = std::fs::remove_dir_all(&root);
     }
 }

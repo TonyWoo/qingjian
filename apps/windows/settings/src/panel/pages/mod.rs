@@ -9,3 +9,4 @@ pub(super) mod fuzzy;
 pub(super) mod general;
 pub(super) mod shortcut;
 pub(super) mod usage;
+pub(super) mod voice;

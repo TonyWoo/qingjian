@@ -47,7 +47,11 @@ impl Router {
         let Some((user_dir, bundled_root)) = self.voice_roots.clone() else {
             return;
         };
-        let model = super::find_model(user_dir.as_deref(), &bundled_root, &self.applied_voice.tier);
+        let model = qingjian_voice::fetch::installed(
+            user_dir.as_deref(),
+            &bundled_root,
+            &self.applied_voice.tier,
+        );
         let Some(dir) = model else {
             tracing::warn!("[voice] 开着但没找到语音模型，语音输入用不了");
             self.teardown_voice();

@@ -7,6 +7,7 @@ mod component;
 mod controls;
 mod message;
 mod pages;
+mod voice_status;
 
 use std::path::{Path, PathBuf};
 
@@ -16,8 +17,9 @@ use windows_reactor::*;
 use self::cloud_status::CloudStatus;
 pub(crate) use self::message::Message;
 use self::pages::{
-    about, advanced, candidates, cloud, dictionaries, fuzzy, general, shortcut, usage,
+    about, advanced, candidates, cloud, dictionaries, fuzzy, general, shortcut, usage, voice,
 };
+use self::voice_status::VoiceStatus;
 
 /// 左侧标签固定宽度，让各行控件对齐。
 const LABEL_WIDTH: f64 = 220.0;
@@ -44,6 +46,12 @@ pub(crate) struct Settings {
 
     /// 「字体」框里正在敲的文字；`None` 显示配置里的值。
     font_query: Option<String>,
+
+    /// 语音「下载模型」的状态。
+    voice_status: VoiceStatus,
+
+    /// 已装好的语音模型目录；没有为 `None`。
+    voice_model: Option<PathBuf>,
 }
 
 impl Settings {
@@ -86,6 +94,15 @@ impl Settings {
         if let Ok(config) = Config::load(&self.path) {
             self.config = config;
         }
+        self.refresh_voice_model();
+    }
+
+    /// 重新找一遍已装的语音模型：档位或开关变了、或者刚下完都要看一次。
+    fn refresh_voice_model(&mut self) {
+        let root =
+            qingjian_platform::resources::bundled_root().unwrap_or_else(|| PathBuf::from("."));
+        self.voice_model =
+            qingjian_voice::fetch::installed(Some(self.data_dir()), &root, &self.config.voice.tier);
     }
 
     fn page_content(&self, context: &mut ViewContext<Self>) -> View {
@@ -96,6 +113,7 @@ impl Settings {
             "fuzzy" => fuzzy::view(self, context),
             "dictionaries" => dictionaries::view(self, context),
             "usage" => usage::view(self, context),
+            "voice" => voice::view(self, context),
             "advanced" => advanced::view(self, context),
             "about" => about::view(self, context),
             _ => general::view(self, context),
