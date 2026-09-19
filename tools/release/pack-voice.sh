@@ -97,20 +97,23 @@ REPO="$(remote_repo)"
 BASE="https://github.com/${REPO}/releases/download/${TAG}"
 echo "发到 ${REPO}"
 
+# **下面每个 gh 调用都要显式 `--repo "$REPO"`**：不传的话 gh 自己猜当前是哪个仓库，
+# 有 fork 的检出里它挑 origin（上游），于是清单里的 URL 指着 fork、资产却发到上游去
+# —— 用户下不到模型，报的还是误导人的「"workflow" scope may be required」（真机踩过）。
 # 资产不可变：标签已存在、且上面已经有同名文件就拒绝，免得改了内容悄悄覆盖
-if gh release view "$TAG" >/dev/null 2>&1; then
+if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
   for f in "$ENCODER" "$DECODER" "$TOKENS"; do
-    if gh release view "$TAG" --json assets --jq '.assets[].name' | grep -qx "$f"; then
+    if gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name' | grep -qx "$f"; then
       echo "$TAG 上已经有 $f 了；资产不可变，换模型请发 voice-v$(( ${TAG#voice-v} + 1 ))" >&2
       exit 1
     fi
   done
 else
-  gh release create "$TAG" --prerelease --target "$(git rev-parse HEAD)" --title "语音模型 $TAG" \
+  gh release create "$TAG" --repo "$REPO" --prerelease --target "$(git rev-parse HEAD)" --title "语音模型 $TAG" \
     --notes "本地离线语音识别模型（只含 int8 的 encoder / decoder 与 tokens）。不可变；仓库 crates/qingjian-voice/voice.lock 钉住要用哪一版，终端用户在设置里按它下载。"
 fi
 
-gh release upload "$TAG" "$OUT/$TIER"/* --clobber=false
+gh release upload "$TAG" --repo "$REPO" "$OUT/$TIER"/* --clobber=false
 
 # 更新锁文件：去掉旧的这一节再追加新的，文件头的说明保留
 BODY="$(
