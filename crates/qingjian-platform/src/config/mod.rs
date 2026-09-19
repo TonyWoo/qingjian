@@ -12,6 +12,7 @@ mod scheme;
 mod shortcut;
 mod status_bar;
 mod theme_mode;
+mod voice;
 
 use std::path::Path;
 
@@ -41,6 +42,7 @@ pub use scheme::{Scheme, scheme_label};
 pub use shortcut::ShortcutConfig;
 pub use status_bar::StatusBarConfig;
 pub use theme_mode::ThemeMode;
+pub use voice::VoiceConfig;
 
 /// 用户配置文件（TOML）。所有平台同一份格式，缺省值全部在各分节的 `Default` 里。
 ///
@@ -75,6 +77,9 @@ pub struct Config {
 
     /// 本地整句模型。
     pub model: LocalModelConfig,
+
+    /// 本地离线语音输入。
+    pub voice: VoiceConfig,
 }
 
 fn deserialize_phrases<'de, D: serde::Deserializer<'de>>(
@@ -248,6 +253,13 @@ disabled = []
 [model]
 # 本地整句模型：随包的小模型在本机给整句候选重新排序，全程离线；停顿后几十毫秒生效。关掉只用词库统计
 enabled = true
+
+[voice]
+# 本地离线语音输入：识别模型不随包（几百 MB），要在设置里按需下载；没下模型时这个开关无效。
+# 全程离线，音频不出本机；密码框等私密输入里不会录音
+enabled = false
+# 用哪一档模型，留空为清单里的第一档
+tier = ""
 
 [predict]
 # 云联想：把光标附近的文本发到下面的接口，让模型补全整句 / 联想下文。默认关闭。
