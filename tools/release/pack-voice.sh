@@ -77,8 +77,23 @@ if [[ "$MODE" == "pack" ]]; then
   exit 0
 fi
 
-REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
+# 仓库从 remote 推：有 fork 就用它，否则 origin。
+# **不能用 `gh repo view` 的默认值** —— 它挑 origin，而在有 fork 的检出里 origin 是上游，
+# 于是 release 会建到上游仓库去（没权限就失败，有权限就是往别人仓库里发东西）。
+remote_repo() {
+  local name url
+  for name in fork origin; do
+    url="$(git remote get-url "$name" 2>/dev/null)" || continue
+    case "$url" in
+      git@github.com:*) printf '%s\n' "${url#git@github.com:}" | sed 's/\.git$//'; return ;;
+      https://github.com/*) printf '%s\n' "${url#https://github.com/}" | sed 's/\.git$//'; return ;;
+    esac
+  done
+}
+REPO="$(remote_repo)"
+[[ -n "$REPO" ]] || { echo "认不出仓库：既没有 fork 也没有 origin remote" >&2; exit 1; }
 BASE="https://github.com/${REPO}/releases/download/${TAG}"
+echo "发到 ${REPO}"
 
 # 资产不可变：标签已存在、且上面已经有同名文件就拒绝，免得改了内容悄悄覆盖
 if gh release view "$TAG" >/dev/null 2>&1; then
