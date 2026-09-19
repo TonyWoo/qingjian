@@ -134,4 +134,4 @@ pub enum InputLogEntry {
 }
 
 /// 当前日志格式版本。
-pub const INPUT_LOG_VERSION: u32 = 1;
+pub const INPUT_LOG_VERSION: u32 = 2;

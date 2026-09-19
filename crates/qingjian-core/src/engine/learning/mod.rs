@@ -82,7 +82,7 @@ impl Engine {
         let mut usage = Usage::of_text(text);
         usage.words = match source {
             InputSource::Word | InputSource::Cloud => 1,
-            InputSource::Sentence | InputSource::CloudSentence => {
+            InputSource::Sentence | InputSource::CloudSentence | InputSource::Voice => {
                 sentence::segment_text(text, &*self.language_model).map_or(usage.hanzi, |clauses| {
                     clauses.iter().map(|words| words.len() as u64).sum()
                 })

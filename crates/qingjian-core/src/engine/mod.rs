@@ -25,6 +25,7 @@ mod statistics;
 mod timings;
 mod translator;
 mod vocabulary;
+mod voice;
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -54,6 +55,9 @@ pub use timings::Timings;
 pub use translator::{NoTranslator, Translator};
 pub use vocabulary::{
     FRESH_UNTIL, LevelCount, NoVocabularyTracker, VocabularySummary, VocabularyTracker,
+};
+pub use voice::{
+    MAX_VOICE_SECONDS, MIN_VOICE_SECONDS, SpeechRecognizer, VOICE_SAMPLE_RATE, VoiceState,
 };
 
 use crate::candidate::{Candidate, CandidateKind, CandidateList, Language};
@@ -254,6 +258,12 @@ pub struct Engine {
 
     /// 繁体输出时「繁体 → 原简体」的映射，组句结束清空；学习、译词、撤销都按简体原文走。
     traditional_map: std::cell::RefCell<HashMap<String, String>>,
+
+    /// 语音识别 worker，缺省没有（没接识别器）；见 [`voice`]。
+    voice: Option<voice::VoiceWorker>,
+
+    /// 一次录音的会话状态：状态、样本缓冲、序号。
+    voice_session: voice::VoiceSession,
 }
 
 /// 英文补全最多几条（`compa` → company / compare / …）。
@@ -387,6 +397,8 @@ impl Engine {
             traditional: false,
             opencc: None,
             traditional_map: std::cell::RefCell::new(HashMap::new()),
+            voice: None,
+            voice_session: voice::VoiceSession::default(),
         }
     }
 }

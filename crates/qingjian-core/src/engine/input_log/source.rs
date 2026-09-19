@@ -35,6 +35,9 @@ pub enum InputSource {
 
     /// Tab 接受的云端整句补全。
     CloudSentence,
+
+    /// 本地语音识别上屏：没有键、没有候选，回放评测里只计数不评命中率。
+    Voice,
 }
 
 impl From<CandidateKind> for InputSource {

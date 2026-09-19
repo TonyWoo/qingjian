@@ -19,6 +19,8 @@ impl Engine {
             // 在飞的云结果不能再显示，前文也不能留
             self.prediction_sequence += 1;
             self.rescoring_before = None;
+            // 密码框里绝不能录；已经录下的、在飞的识别结果也一并作废
+            self.cancel_voice();
         }
     }
 

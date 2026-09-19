@@ -10,6 +10,7 @@ mod learning;
 mod lookup;
 mod privacy;
 mod shuangpin;
+mod voice;
 mod zhuyin;
 
 use std::collections::HashMap;

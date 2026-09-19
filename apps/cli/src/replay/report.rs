@@ -58,11 +58,13 @@ impl Report {
             InputSource::Sentence => Some(&mut self.sentence),
             InputSource::English => Some(&mut self.english),
             InputSource::Shortcut | InputSource::Emoji => Some(&mut self.other),
+            // 语音文本不是本地排序的输出（没有键、没有候选），拿它评首选命中率是关公战秦琼
             InputSource::Custom
             | InputSource::Cloud
             | InputSource::CloudSentence
             | InputSource::Raw
-            | InputSource::Translation => None,
+            | InputSource::Translation
+            | InputSource::Voice => None,
         }
     }
 
